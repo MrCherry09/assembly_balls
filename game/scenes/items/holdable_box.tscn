@@ -1,0 +1,28 @@
+[gd_scene format=3 uid="uid://r3cu2l2koklc"]
+
+[ext_resource type="Script" uid="uid://l4bk87lb5lf3" path="res://scenes/items/holdable_item.gd" id="1_item"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_box"]
+size = Vector3(0.6, 0.6, 0.6)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_box"]
+albedo_color = Color(0.75, 0.35, 0.2, 1)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_box"]
+size = Vector3(0.6, 0.6, 0.6)
+
+[node name="HoldableBox" type="RigidBody3D" unique_id=1918359207 node_paths=PackedStringArray("mesh_instance")]
+collision_layer = 1
+collision_mask = 3
+mass = 1.5
+continuous_cd = true
+can_sleep = false
+script = ExtResource("1_item")
+mesh_instance = NodePath("MeshInstance3D")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1780327988]
+mesh = SubResource("BoxMesh_box")
+surface_material_override/0 = SubResource("StandardMaterial3D_box")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=909335116]
+shape = SubResource("BoxShape3D_box")

@@ -51,7 +51,8 @@ func _setup_look_hint_label() -> void:
 	look_hint_label = Label.new()
 	look_hint_label.name = "LookHintLabel"
 	look_hint_label.position = Vector2(16, 16)
-	look_hint_label.text = "Hold RMB to look  |  Hold V to aim"
+	look_hint_label.text = "RMB look  |  V aim  |  LMB grab items (free cursor)"
+
 	look_hint_label.add_theme_font_size_override("font_size", 18)
 	look_hint_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	look_hint_label.add_theme_constant_override("outline_size", 4)

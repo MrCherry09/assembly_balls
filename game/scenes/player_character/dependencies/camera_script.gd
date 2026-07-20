@@ -154,6 +154,9 @@ func _apply_look_rotation() -> void:
 func get_look_yaw() -> float:
 	return _look_yaw
 
+func is_look_busy() -> bool:
+	return _orbiting or is_aiming
+
 func _handle_mouse_motion(event: InputEventMouseMotion) -> void:
 	# Free-look while RMB orbiting or while aiming.
 	if not _orbiting and not is_aiming: return

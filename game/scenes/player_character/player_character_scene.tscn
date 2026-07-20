@@ -17,6 +17,7 @@
 [ext_resource type="Script" uid="uid://dvu58wf01wils" path="res://scenes/player_character/dependencies/StateMachine/jump_state_script.gd" id="58_gwv0a"]
 [ext_resource type="Script" uid="uid://bh3rdvokmrar1" path="res://scenes/player_character/dependencies/StateMachine/inair_state_script.gd" id="59_bqtt6"]
 [ext_resource type="Script" uid="uid://bhoqhv7escpyx" path="res://scenes/player_character/dependencies/StateMachine/crouch_state_script.gd" id="60_tu3bf"]
+[ext_resource type="Script" path="res://scenes/player_character/dependencies/item_grabber.gd" id="61_grab"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_5yjma"]
 
@@ -520,6 +521,7 @@ height = 0.3
 
 [node name="PlayerCharacter" type="CharacterBody3D" unique_id=1141353556 node_paths=PackedStringArray("nick_label") groups=["PlayerCharacter"]]
 collision_layer = 2
+collision_mask = 1
 floor_block_on_wall = false
 floor_max_angle = 1.13446
 floor_snap_length = 0.0
@@ -578,6 +580,9 @@ script = ExtResource("58_gwv0a")
 
 [node name="InairState" type="Node" parent="StateMachine" unique_id=1375662719]
 script = ExtResource("59_bqtt6")
+
+[node name="ItemGrabber" type="Node" parent="."]
+script = ExtResource("61_grab")
 
 [node name="Hitbox" type="CollisionShape3D" parent="." unique_id=1725737678]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
