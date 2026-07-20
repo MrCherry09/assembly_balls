@@ -2,6 +2,7 @@ extends Node3D
 class_name PlayerCharacterModelBody
 
 const ROTATION_SYNC_SPEED: float = 10.0
+const AIM_ROTATION_SYNC_SPEED: float = 40.0
 @export var anim_lib_prefix := "Robot/"
 @export var player: PlayerCharacter = null
 @export var animation_player: AnimationPlayer = null
@@ -19,12 +20,11 @@ func _process(delta: float) -> void:
 	if parent and parent is Node3D:
 		top_level = true
 		self.global_position = parent.global_position
-		
 		sync_rotations(delta)
 	else:
 		top_level = false
 		self.position = Vector3.ZERO
-	
+
 	if multiplayer.has_multiplayer_peer() and not is_multiplayer_authority(): return
 	if player and animation_player: _update_animations()
 
@@ -67,7 +67,7 @@ func _update_animations() -> void:
 		anim = "Fly"
 	if curr_state is IdleState:
 		anim = "Idle"
-	
+
 	last_anim = anim
 	last_state = curr_state
 	if not anim: return
@@ -75,56 +75,40 @@ func _update_animations() -> void:
 	if animation_player.current_animation != anim or not animation_player.is_playing():
 		animation_player.playback_default_blend_time = blend
 		animation_player.speed_scale = speed
-		animation_player.play(anim,blend,speed)
+		animation_player.play(anim, blend, speed)
 
-@rpc("any_peer","call_remote")
-func play(anim: String,blend: float, speed: float) -> void:
-	animation_player.play(anim,blend,speed)
+@rpc("any_peer", "call_remote")
+func play(anim: String, blend: float, speed: float) -> void:
+	animation_player.play(anim, blend, speed)
 
-func sync_rotations(delta: float, reference_node: Node3D = player.cam_holder, velocity: float = ROTATION_SYNC_SPEED) -> void:
-	var target_yaw: float
-	if player and player.cam_holder and player.cam_holder.is_third_person:
-		# Detached free-look: follow body yaw, not camera yaw
-		target_yaw = player.character_model.rotation.y if player.character_model else player.body_yaw
-	elif reference_node:
-		target_yaw = reference_node.rotation.y
-	else:
-		return
-	rotation.y = lerp_angle(rotation.y, target_yaw, velocity * delta)
+func sync_rotations(delta: float, _reference_node: Node3D = null, velocity: float = ROTATION_SYNC_SPEED) -> void:
+	if not player: return
+	var target_yaw: float = player.character_model.rotation.y if player.character_model else player.body_yaw
+	var sync_speed := AIM_ROTATION_SYNC_SPEED if player.cam_holder and player.cam_holder.is_aiming else velocity
+	rotation.y = lerp_angle(rotation.y, target_yaw, clampf(sync_speed * delta, 0.0, 1.0))
 
 func _on_peer_connected(_peer: int) -> void:
 	_update_mesh_view.call_deferred()
-
-func _on_camera_mode_changed(_is_third_person: bool) -> void:
-	_update_mesh_view()
 
 func _ready() -> void:
 	_update_mesh_view.call_deferred()
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_connected.connect(func(_id: int) -> void: if is_multiplayer_authority(): _set_mesh_color.rpc(curr_color))
-	if player and player.cam_holder:
-		player.cam_holder.camera_mode_changed.connect(_on_camera_mode_changed)
 
 func _update_mesh_view() -> void:
-	var third_person := player != null and player.cam_holder != null and player.cam_holder.is_third_person
-	var show_full_body := not is_multiplayer_authority() or third_person
+	# Always show the full body in third person
 	for child in skeleton_3d.get_children():
 		child.visible = false
 		if child is MeshInstance3D:
-			child.visible = show_full_body or child == limbs_and_head
-	var bone_names := [
-		"Head",
-		"HeadTop",
-	]
-
-	for bone_name in bone_names:
-		var new_scale := Vector3.ONE if show_full_body else Vector3.ZERO
+			child.visible = true
+	for bone_name in ["Head", "HeadTop"]:
 		var bone_index := skeleton_3d.find_bone(bone_name)
-		if bone_index >= 0: skeleton_3d.set_bone_pose_scale(bone_index, new_scale)
+		if bone_index >= 0:
+			skeleton_3d.set_bone_pose_scale(bone_index, Vector3.ONE)
 	if is_multiplayer_authority():
 		_set_mesh_color.rpc(Online.personal_player_data.color)
 
-@rpc("any_peer","call_local")
+@rpc("any_peer", "call_local")
 func _set_mesh_color(color: Color):
 	curr_color = color
 	for mesh: MeshInstance3D in skeleton_3d.find_children("*", "MeshInstance3D"):
