@@ -526,8 +526,7 @@ floor_snap_length = 0.0
 platform_floor_layers = 4278190081
 script = ExtResource("1_h128t")
 nick_label = NodePath("PlayerNick/NickLabel")
-walk_speed = 7.0
-run_speed = 10.0
+walk_speed = 5.0
 jump_height = 4.0
 
 [node name="PlayerNick" type="Node3D" parent="." unique_id=1634704510]
