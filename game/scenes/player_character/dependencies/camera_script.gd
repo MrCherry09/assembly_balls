@@ -64,8 +64,10 @@ var _orbiting: bool = false
 ## Absolute look angles — never use rotate_x for pitch or eulers can flip past vertical.
 var _look_yaw: float = 0.0
 var _look_pitch: float = 0.0
-var _stored_mouse_position: Vector2 = Vector2.ZERO
-var _has_stored_mouse_position: bool = false
+## Viewport-space cursor (must pair with Viewport.warp_mouse — not Input/DisplayServer).
+var _stored_cursor_vp: Vector2 = Vector2.ZERO
+var _has_stored_cursor: bool = false
+var _mouse_captured: bool = false
 
 @export_group("Keybind variables")
 @export var zoom_action: StringName = "play_char_zoom_action"
@@ -163,13 +165,17 @@ func _handle_mouse_motion(event: InputEventMouseMotion) -> void:
 
 func _set_orbiting(orbiting: bool) -> void:
 	_orbiting = orbiting
-	_update_input_capture(orbiting or is_aiming)
+	_sync_mouse_mode()
 
 func _unhandled_input(event) -> void:
 	if multiplayer and not is_multiplayer_authority(): return
 	if event is InputEventMouseMotion:
 		_handle_mouse_motion(event)
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
+		if event.pressed and not _mouse_captured:
+			# event.position is already viewport-space (stretch-safe with Viewport.warp_mouse).
+			_stored_cursor_vp = event.position
+			_has_stored_cursor = true
 		_set_orbiting(event.pressed)
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("ui_cancel"):
@@ -197,12 +203,12 @@ func _update_aim(delta: float) -> void:
 	var want_aim := Input.is_action_pressed(aim_action)
 	if want_aim and not _was_aiming:
 		_store_hip_fire_camera_state()
-		_update_input_capture(true)
-	elif not want_aim and _was_aiming:
-		if not _orbiting:
-			_update_input_capture(false)
+		if not _mouse_captured:
+			_stored_cursor_vp = get_viewport().get_mouse_position()
+			_has_stored_cursor = true
 	_was_aiming = want_aim
 	is_aiming = want_aim
+	_sync_mouse_mode()
 
 	var t := clampf(aim_blend_speed * delta, 0.0, 1.0)
 	var target_shoulder := aim_shoulder_offset if is_aiming else _stored_shoulder_offset
@@ -282,19 +288,38 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		_set_orbiting(false)
 
-func _update_input_capture(capture_input: bool) -> void:
-	if not is_multiplayer_authority(): return
-	if not camera.current: return
-	if capture_input:
-		# Remember free-cursor position before capture centers it
-		if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
-			_stored_mouse_position = get_viewport().get_mouse_position()
-			_has_stored_mouse_position = true
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-	else:
+func _sync_mouse_mode() -> void:
+	if not is_multiplayer_authority():
+		return
+	if not camera.current:
+		return
+	var want_capture := _orbiting or is_aiming
+	if want_capture:
+		if not _mouse_captured:
+			if not _has_stored_cursor:
+				_stored_cursor_vp = get_viewport().get_mouse_position()
+				_has_stored_cursor = true
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+			_mouse_captured = true
+	elif _mouse_captured:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-		if _has_stored_mouse_position:
-			var restore_pos := _stored_mouse_position
-			_has_stored_mouse_position = false
-			# Deferred so the OS applies VISIBLE before the warp
-			Input.warp_mouse.call_deferred(restore_pos)
+		_mouse_captured = false
+		if _has_stored_cursor:
+			var pos := _stored_cursor_vp
+			_has_stored_cursor = false
+			# Windows + stretch: first warp after uncapture often misses (centers / drifts).
+			# Viewport get/warp is the matching stretch-safe pair; warp repeatedly.
+			_restore_cursor_vp(pos)
+
+func _restore_cursor_vp(pos: Vector2) -> void:
+	var vp := get_viewport()
+	# Known Godot/Windows bug: need multiple warps after leaving CAPTURED.
+	for _i in 8:
+		vp.warp_mouse(pos)
+	# One more after the OS finishes uncapture.
+	_restore_cursor_vp_deferred.call_deferred(pos)
+
+func _restore_cursor_vp_deferred(pos: Vector2) -> void:
+	var vp := get_viewport()
+	for _i in 8:
+		vp.warp_mouse(pos)
