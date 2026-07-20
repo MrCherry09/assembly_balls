@@ -36,11 +36,19 @@ func _process(_delta: float) -> void: _process_steam_p2p_packets()
 
 func leave_lobby() -> void:
 	is_host = false
-	if not steam_lobby_id and not multiplayer.has_multiplayer_peer(): return
-	Steam.leaveLobby(steam_lobby_id)
-	if multiplayer.multiplayer_peer: multiplayer.multiplayer_peer.close()
-	steam_lobby_id = 0
-	player_disconnected.emit(personal_player_data)
+	is_busy = false
+	is_joining = false
+	var had_session := steam_lobby_id != 0 or multiplayer.multiplayer_peer != null
+	if steam_lobby_id != 0:
+		Steam.leaveLobby(steam_lobby_id)
+		steam_lobby_id = 0
+	if multiplayer.multiplayer_peer:
+		multiplayer.multiplayer_peer.close()
+		multiplayer.multiplayer_peer = null
+	players.clear()
+	# Notify lobby UI / spawn cleanup. Safe to emit even if peer.close() also triggers it.
+	if had_session:
+		server_disconnected.emit()
 
 
 func join_address(address: String, port: int = LOCAL_SERVER_PORT) -> ErrorCodes:
@@ -129,16 +137,18 @@ func _setup_steam_multiplayer() -> void:
 
 func _on_steam_lobby_created(connection_response: int, lobby_id: int) -> void:
 	match connection_response:
-		Steam.RESULT_OK: 
+		Steam.RESULT_OK:
 			steam_lobby_id = lobby_id
 			Steam.setLobbyJoinable(lobby_id, true)
-			_register_player_data(personal_player_data.to_dict())
-			_register_player_data(personal_player_data.to_dict())
 			lobby_hosting_response.emit.call_deferred(ErrorCodes.SUCCESS)
-		_: lobby_hosting_response.emit(ErrorCodes.FAILED)
+		_:
+			lobby_hosting_response.emit(ErrorCodes.FAILED)
 
 func host_steam_lobby() -> ErrorCodes:
 	if is_busy: return ErrorCodes.CURRENTLY_BUSY
+	# Tear down any previous Steam/local session before hosting again
+	if steam_lobby_id != 0 or multiplayer.multiplayer_peer != null:
+		leave_lobby()
 	is_host = false
 	is_busy = true
 	var new_steam_peer := _create_steam_peer()
@@ -152,9 +162,18 @@ func host_steam_lobby() -> ErrorCodes:
 			match hosting_response:
 				ErrorCodes.SUCCESS:
 					is_host = true
+					# Assign peer first so personal_player_data gets a real multiplayer id
 					multiplayer.multiplayer_peer = new_steam_peer
+					_register_player_data(personal_player_data.to_dict())
 					joined_lobby.emit()
-		_: error_response = ErrorCodes.FAILED
+				_:
+					new_steam_peer.close()
+					if steam_lobby_id != 0:
+						Steam.leaveLobby(steam_lobby_id)
+						steam_lobby_id = 0
+		_:
+			error_response = ErrorCodes.FAILED
+			new_steam_peer.close()
 	is_busy = false
 	return error_response
 
@@ -222,6 +241,8 @@ func _setup_local_multiplayer() -> void:
 
 func host_local_lobby() -> ErrorCodes:
 	if is_busy: return ErrorCodes.CURRENTLY_BUSY
+	if steam_lobby_id != 0 or multiplayer.multiplayer_peer != null:
+		leave_lobby()
 	is_busy = true
 	is_host = true
 	
@@ -235,6 +256,7 @@ func host_local_lobby() -> ErrorCodes:
 			return ErrorCodes.SUCCESS
 		_:
 			is_host = false
+			is_busy = false
 			return ErrorCodes.FAILED
 
 func join_local_lobby() -> ErrorCodes:
