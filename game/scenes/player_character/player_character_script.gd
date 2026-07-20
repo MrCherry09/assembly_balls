@@ -92,7 +92,7 @@ var default_input_actions: Dictionary
 @onready var character_model: Node3D = %CharacterModel
 
 func _ready() -> void:
-	# Holdables cannot shove the player during penetration resolution.
+	# Holdables never collide with the player (separate physics layers).
 	collision_priority = 100.0
 
 	if not is_multiplayer_authority():

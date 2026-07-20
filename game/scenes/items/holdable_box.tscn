@@ -12,13 +12,13 @@ albedo_color = Color(0.75, 0.35, 0.2, 1)
 size = Vector3(0.6, 0.6, 0.6)
 
 [node name="HoldableBox" type="RigidBody3D" unique_id=1918359207 node_paths=PackedStringArray("mesh_instance")]
-collision_layer = 132
-collision_mask = 135
+collision_layer = 4
+collision_mask = 5
 can_sleep = false
 continuous_cd = true
 script = ExtResource("1_item")
 mesh_instance = NodePath("MeshInstance3D")
-mass_kg = 1.0
+mass_kg = 10.0
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1780327988]
 mesh = SubResource("BoxMesh_box")

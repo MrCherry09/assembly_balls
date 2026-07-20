@@ -2,11 +2,15 @@ extends Node
 class_name ItemGrabber
 
 ## Free-cursor grab: LMB picks an item; mouse moves it on a depth plane in world space.
-## Does not pull toward camera or throw on release.
+## Release keeps the item's current velocity so a flick throws it.
 
 @export var grab_range: float = 8.0
-@export var hold_follow_speed: float = 14.0
-## Must match HoldableItem.LAYER_HOLDABLE (layer 3).
+@export var hold_follow_speed: float = 12.0
+## Scales release velocity (1 = keep drag speed as-is).
+@export var throw_velocity_scale: float = 0.825
+## Caps how hard a flick can launch an item.
+@export var throw_max_speed: float = 15.0
+## Must match HoldableItem.LAYER_HOLDABLE (physics layer bit 4).
 @export var grab_collision_mask: int = 4
 
 var held_item: HoldableItem = null
@@ -15,6 +19,8 @@ var _grab_held: bool = false
 var _grab_depth: float = 0.0
 ## Object origin relative to the ray hit point — stops the mesh snapping under the cursor.
 var _grab_offset: Vector3 = Vector3.ZERO
+## Smoothed velocity while dragging — used as throw impulse on release.
+var _throw_velocity: Vector3 = Vector3.ZERO
 
 @onready var _player: PlayerCharacter = get_parent() as PlayerCharacter
 
@@ -55,10 +61,17 @@ func _physics_process(delta: float) -> void:
 	if held_item == null or not is_instance_valid(held_item):
 		held_item = null
 		return
-	if not _grab_held or _look_busy():
+	if not _grab_held:
 		_release_held()
 		return
+	# While looking, cursor is captured — keep dragging via the pre-capture screen pos
+	# so the item tracks that point as the camera moves.
 	_drag_on_depth_plane(delta)
+
+func _drag_cursor_vp() -> Vector2:
+	if _look_busy() and _player and _player.cam_holder:
+		return _player.cam_holder.get_drag_cursor_vp()
+	return get_viewport().get_mouse_position()
 
 func _try_grab() -> void:
 	if held_item != null:
@@ -72,10 +85,12 @@ func _try_grab() -> void:
 	var item := _find_holdable(hit.collider)
 	if item == null or item.is_held:
 		return
-	var from: Vector3 = hit.from if hit.has("from") else cam.project_ray_origin(get_viewport().get_mouse_position())
+	var mouse := _drag_cursor_vp()
+	var from: Vector3 = hit.from if hit.has("from") else cam.project_ray_origin(mouse)
 	# Lock depth at the surface under the cursor — object stays at that world distance.
 	_grab_depth = from.distance_to(hit.position)
 	_grab_offset = item.global_position - hit.position
+	_throw_velocity = Vector3.ZERO
 	held_item = item
 	held_item.set_held(self, true)
 
@@ -84,28 +99,40 @@ func _release_held() -> void:
 		held_item = null
 		_grab_depth = 0.0
 		_grab_offset = Vector3.ZERO
+		_throw_velocity = Vector3.ZERO
 		return
 	var item := held_item
+	var release_vel := _throw_velocity
+	if release_vel.length() < item.linear_velocity.length():
+		release_vel = item.linear_velocity
+	release_vel *= throw_velocity_scale
+	if release_vel.length() > throw_max_speed:
+		release_vel = release_vel.normalized() * throw_max_speed
 	held_item = null
 	_grab_depth = 0.0
 	_grab_offset = Vector3.ZERO
-	item.set_held(self, false)
+	_throw_velocity = Vector3.ZERO
+	item.set_held(self, false, release_vel)
 
 func _drag_on_depth_plane(delta: float) -> void:
 	var cam := _camera()
 	if cam == null or held_item == null:
 		return
-	var mouse := get_viewport().get_mouse_position()
+	var mouse := _drag_cursor_vp()
 	var origin := cam.project_ray_origin(mouse)
 	var dir := cam.project_ray_normal(mouse)
 	var target := origin + dir * _grab_depth + _grab_offset
 	held_item.drive_toward(target, hold_follow_speed, delta)
+	# Blend toward current drag velocity so a flick still has momentum on release.
+	var sample := held_item.linear_velocity
+	var blend := clampf(18.0 * delta, 0.0, 1.0)
+	_throw_velocity = _throw_velocity.lerp(sample, blend)
 
 func _raycast_at_mouse() -> Dictionary:
 	var cam := _camera()
 	if cam == null:
 		return {}
-	var mouse := get_viewport().get_mouse_position()
+	var mouse := _drag_cursor_vp()
 	var from := cam.project_ray_origin(mouse)
 	var to := from + cam.project_ray_normal(mouse) * grab_range
 	var space := cam.get_world_3d().direct_space_state

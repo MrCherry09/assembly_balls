@@ -179,6 +179,12 @@ func get_look_yaw() -> float:
 func is_look_busy() -> bool:
 	return _orbiting or is_aiming
 
+## Screen position used for item drag while the cursor is captured (RMB / aim).
+func get_drag_cursor_vp() -> Vector2:
+	if _has_stored_cursor:
+		return _stored_cursor_vp
+	return get_viewport().get_mouse_position()
+
 func _handle_mouse_motion(event: InputEventMouseMotion) -> void:
 	# Free-look while RMB orbiting or while aiming.
 	if not _orbiting and not is_aiming: return
@@ -265,9 +271,6 @@ func _update_camera_position(delta: float) -> void:
 	var query := PhysicsRayQueryParameters3D.create(pivot_global, desired_global)
 	query.collision_mask = collision_mask
 	var exclude: Array[RID] = [play_char.get_rid()]
-	var item_wall := play_char.get_node_or_null("ItemColliderStaticBody") as CollisionObject3D
-	if item_wall:
-		exclude.append(item_wall.get_rid())
 	query.exclude = exclude
 	var hit := space.intersect_ray(query)
 

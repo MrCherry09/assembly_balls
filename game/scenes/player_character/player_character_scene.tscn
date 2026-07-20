@@ -519,7 +519,7 @@ height = 0.3
 
 [node name="PlayerCharacter" type="CharacterBody3D" unique_id=1141353556 node_paths=PackedStringArray("nick_label") groups=["PlayerCharacter"]]
 collision_layer = 2
-collision_mask = 5
+collision_mask = 1
 collision_priority = 100.0
 floor_block_on_wall = false
 floor_max_angle = 1.13446
@@ -582,15 +582,6 @@ script = ExtResource("59_bqtt6")
 
 [node name="ItemGrabber" type="Node" parent="." unique_id=2029990037]
 script = ExtResource("61_grab")
-
-[node name="ItemColliderStaticBody" type="StaticBody3D" parent="." unique_id=319500249]
-transform = Transform3D(1.05, 0, 0, 0, 1.05, 0, 0, 0, 1.05, 0, 1.0128322, 0)
-collision_layer = 128
-collision_mask = 132
-
-[node name="ItemColliderWall" type="CollisionShape3D" parent="ItemColliderStaticBody" unique_id=1251193145]
-transform = Transform3D(0.99999994, 0, 0, 0, 0.99999994, 0, 0, 0, 0.99999994, 0, 0.011588395, 0)
-shape = SubResource("CapsuleShape3D_5yjma")
 
 [node name="Hitbox" type="CollisionShape3D" parent="." unique_id=1725737678]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)

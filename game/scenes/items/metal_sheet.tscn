@@ -70,10 +70,10 @@ size = Vector3(0.09, 1.35, 1.1)
 
 [node name="MetalSheet" type="RigidBody3D" unique_id=20517615]
 transform = Transform3D(-4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 0, 0, 1, 0, 0, 0)
-collision_layer = 129
-collision_mask = 129
+collision_layer = 4
+collision_mask = 5
 script = ExtResource("1_ajebi")
-mass_kg = 1.0
+mass_kg = 10.0
 metadata/_custom_type_script = "uid://l4bk87lb5lf3"
 
 [node name="Mesh" type="MeshInstance3D" parent="." unique_id=282976946]
