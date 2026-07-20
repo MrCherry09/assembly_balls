@@ -13,8 +13,10 @@ const PITCH_LIMIT_DEG := 89.0
 @export_range(-1.0, 2.0, 0.05) var camera_height: float = 0.35
 @export_range(-2.0, 2.0, 0.05) var shoulder_offset: float = 1.05
 @export_range(0.05, 1.0, 0.01) var collision_margin: float = 0.2
+## How quickly the camera eases in/out when a wall shortens the arm.
+@export_range(1.0, 40.0, 0.1) var collision_smooth_speed: float = 16.0
 @export var collision_mask: int = 1
-## Optional orbit pivot (e.g. head/chest). Falls back to CameraHolder origin.
+## Optional cosmetic pivot only — orbit/collision use the CameraHolder (stable).
 @export var link_to: Node3D
 
 @export_group("Aim")
@@ -32,6 +34,10 @@ var _current_camera_distance: float = 0.0
 var _stored_shoulder_offset: float = 0.0
 var _stored_camera_distance: float = 0.0
 var _was_aiming: bool = false
+## Smoothed orbit arm length (avoids hard snaps when colliding with walls).
+var _arm_length: float = 0.0
+## Local Y of CameraHolder on the player (baked out when top_level).
+var _holder_height: float = 0.0
 
 @export_group("fov variables")
 @export var state_fovs_map: Dictionary[String, Vector2] = {
@@ -92,13 +98,21 @@ func _ready() -> void:
 	_current_camera_distance = camera_distance
 	_stored_shoulder_offset = shoulder_offset
 	_stored_camera_distance = camera_distance
+	_arm_length = camera_distance
+	_holder_height = position.y
 	_keep_wall_raycasts_on_pivot()
 	build_default_keybinding()
 	input_actions_check()
+	# Detach from the CharacterBody so we can follow its *interpolated* pose
+	# without fighting physics_interpolation (the usual third-person jitter).
+	top_level = true
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	var activate_camera: bool = not multiplayer or is_multiplayer_authority()
 	_update_camera_current.call_deferred(activate_camera)
 	_set_orbiting(false)
 	_apply_look_rotation()
+	_snap_to_player_interpolated()
 
 ## Wallrun raycasts must stay at the player pivot; otherwise camera offset breaks them.
 func _keep_wall_raycasts_on_pivot() -> void:
@@ -145,10 +159,18 @@ func _clamp_look_pitch() -> void:
 	var limits := _get_pitch_limits_rad()
 	_look_pitch = clampf(_look_pitch, limits.x, limits.y)
 
+func _pivot_origin_from_player(player_xf: Transform3D) -> Vector3:
+	return player_xf.origin + Vector3(0.0, _holder_height, 0.0)
+
+func _snap_to_player_interpolated() -> void:
+	var player_xf := play_char.get_global_transform_interpolated()
+	global_position = _pivot_origin_from_player(player_xf)
+	_apply_look_rotation()
+	camera.position = _orbit_local(_arm_length, _look_pitch)
+
 func _apply_look_rotation() -> void:
 	_clamp_look_pitch()
-	rotation.y = _look_yaw
-	rotation.x = 0.0
+	rotation = Vector3(0.0, _look_yaw, 0.0)
 	camera.rotation = Vector3(_look_pitch, 0.0, 0.0)
 
 func get_look_yaw() -> float:
@@ -185,6 +207,8 @@ func _unhandled_input(event) -> void:
 		_set_orbiting(false)
 
 func _process(delta: float) -> void:
+	if multiplayer.has_multiplayer_peer() and not is_multiplayer_authority():
+		return
 	state = play_char.state_machine.curr_state_name
 	if camera.v_offset != 0.0:
 		camera.v_offset = 0.0
@@ -192,9 +216,11 @@ func _process(delta: float) -> void:
 		rotation_degrees.z = 0.0
 
 	_update_aim(delta)
+	# Follow the same interpolated player pose the renderer uses.
+	global_position = _pivot_origin_from_player(play_char.get_global_transform_interpolated())
 	_apply_look_rotation()
 	zoom()
-	_update_camera_position()
+	_update_camera_position(delta)
 
 func _store_hip_fire_camera_state() -> void:
 	_stored_shoulder_offset = _current_shoulder_offset
@@ -219,27 +245,48 @@ func _update_aim(delta: float) -> void:
 	_current_shoulder_offset = lerpf(_current_shoulder_offset, target_shoulder, t)
 	_current_camera_distance = lerpf(_current_camera_distance, target_distance, t)
 
-func _update_camera_position() -> void:
-	var pitch := _look_pitch
-	var desired_local := Vector3(
+func _orbit_local(arm: float, pitch: float) -> Vector3:
+	return Vector3(
 		_current_shoulder_offset,
-		-sin(pitch) * _current_camera_distance + camera_height,
-		cos(pitch) * _current_camera_distance
+		-sin(pitch) * arm + camera_height,
+		cos(pitch) * arm
 	)
+
+func _update_camera_position(delta: float) -> void:
+	var pitch := _look_pitch
+	var target_arm := _current_camera_distance
+	var desired_local := _orbit_local(target_arm, pitch)
+
+	# Use this frame's visual pivot so the camera never sits past what the ray allows.
 	var pivot_global := global_position
-	if link_to:
-		pivot_global = link_to.global_position
 	var desired_global := global_transform * desired_local
 
 	var space := get_world_3d().direct_space_state
 	var query := PhysicsRayQueryParameters3D.create(pivot_global, desired_global)
 	query.collision_mask = collision_mask
-	query.exclude = [play_char.get_rid()]
+	var exclude: Array[RID] = [play_char.get_rid()]
+	var item_wall := play_char.get_node_or_null("ItemColliderStaticBody") as CollisionObject3D
+	if item_wall:
+		exclude.append(item_wall.get_rid())
+	query.exclude = exclude
 	var hit := space.intersect_ray(query)
+
 	if hit:
-		camera.global_position = hit.position + hit.normal * collision_margin
+		var full_dist := pivot_global.distance_to(desired_global)
+		var safe_dist := maxf(pivot_global.distance_to(hit.position) - collision_margin, 0.2)
+		# Snap onto the ray immediately — never lerp into geometry.
+		if full_dist > 0.0001:
+			var t := clampf(safe_dist / full_dist, 0.0, 1.0)
+			camera.position = desired_local * t
+			_arm_length = target_arm * t
+		else:
+			camera.position = desired_local.normalized() * 0.2
+			_arm_length = 0.2
 	else:
-		camera.global_position = desired_global
+		# Only smooth when extending back out into free space.
+		var smooth_t := clampf(collision_smooth_speed * delta, 0.0, 1.0)
+		_arm_length = lerpf(_arm_length, target_arm, smooth_t)
+		camera.position = _orbit_local(_arm_length, pitch)
 
 func zoom() -> void:
 	if Input.is_action_just_pressed(zoom_action):

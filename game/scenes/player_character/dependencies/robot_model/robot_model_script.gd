@@ -15,18 +15,27 @@ var last_state: State
 var last_anim := ""
 var curr_color := Color.WHITE
 
+func _ready() -> void:
+	# Manual follow of the interpolated player — don't also run physics interpolation.
+	top_level = true
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	_update_mesh_view.call_deferred()
+	multiplayer.peer_connected.connect(_on_peer_connected)
+	multiplayer.peer_connected.connect(func(_id: int) -> void: if is_multiplayer_authority(): _set_mesh_color.rpc(curr_color))
+
 func _process(delta: float) -> void:
-	var parent := self.get_parent()
-	if parent and parent is Node3D:
-		top_level = true
-		self.global_position = parent.global_position
+	var parent := get_parent() as Node3D
+	if parent:
+		global_position = parent.get_global_transform_interpolated().origin
 		sync_rotations(delta)
 	else:
 		top_level = false
-		self.position = Vector3.ZERO
+		position = Vector3.ZERO
 
-	if multiplayer.has_multiplayer_peer() and not is_multiplayer_authority(): return
-	if player and animation_player: _update_animations()
+	if multiplayer.has_multiplayer_peer() and not is_multiplayer_authority():
+		return
+	if player and animation_player:
+		_update_animations()
 
 func _update_animations() -> void:
 	var curr_state: State = player.state_machine.curr_state
@@ -74,11 +83,6 @@ func sync_rotations(delta: float, _reference_node: Node3D = null, velocity: floa
 
 func _on_peer_connected(_peer: int) -> void:
 	_update_mesh_view.call_deferred()
-
-func _ready() -> void:
-	_update_mesh_view.call_deferred()
-	multiplayer.peer_connected.connect(_on_peer_connected)
-	multiplayer.peer_connected.connect(func(_id: int) -> void: if is_multiplayer_authority(): _set_mesh_color.rpc(curr_color))
 
 func _update_mesh_view() -> void:
 	# Always show the full body in third person

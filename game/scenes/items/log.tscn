@@ -59,8 +59,11 @@ height = 1.0
 radius = 0.2
 
 [node name="Log" type="RigidBody3D" unique_id=754231132 node_paths=PackedStringArray("mesh_instance")]
+collision_layer = 129
+collision_mask = 129
 script = ExtResource("1_ekc8o")
 mesh_instance = NodePath("LogPivot/Wood_Piece_5_Wood_0")
+mass_kg = 1.0
 metadata/_custom_type_script = "uid://l4bk87lb5lf3"
 
 [node name="LogPivot" type="Node3D" parent="." unique_id=938275796]

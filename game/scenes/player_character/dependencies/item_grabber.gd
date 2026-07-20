@@ -1,16 +1,20 @@
 extends Node
 class_name ItemGrabber
 
-## Free-cursor grab: click an item with LMB while not aiming / RMB-looking.
+## Free-cursor grab: LMB picks an item; mouse moves it on a depth plane in world space.
+## Does not pull toward camera or throw on release.
 
 @export var grab_range: float = 8.0
-@export var hold_distance: float = 2.5
-@export var hold_follow_speed: float = 22.0
-@export var release_throw_strength: float = 3.5
-@export var grab_collision_mask: int = 1
+@export var hold_follow_speed: float = 14.0
+## Must match HoldableItem.LAYER_HOLDABLE (layer 3).
+@export var grab_collision_mask: int = 4
 
 var held_item: HoldableItem = null
 var _grab_held: bool = false
+## Distance along the view ray from the camera to the grab point (kept while held).
+var _grab_depth: float = 0.0
+## Object origin relative to the ray hit point — stops the mesh snapping under the cursor.
+var _grab_offset: Vector3 = Vector3.ZERO
 
 @onready var _player: PlayerCharacter = get_parent() as PlayerCharacter
 
@@ -54,46 +58,53 @@ func _physics_process(delta: float) -> void:
 	if not _grab_held or _look_busy():
 		_release_held()
 		return
-	_follow_mouse_hold_point(delta)
+	_drag_on_depth_plane(delta)
 
 func _try_grab() -> void:
 	if held_item != null:
 		return
-	var item := _raycast_holdable_at_mouse()
+	var cam := _camera()
+	if cam == null:
+		return
+	var hit := _raycast_at_mouse()
+	if hit.is_empty():
+		return
+	var item := _find_holdable(hit.collider)
 	if item == null or item.is_held:
 		return
+	var from: Vector3 = hit.from if hit.has("from") else cam.project_ray_origin(get_viewport().get_mouse_position())
+	# Lock depth at the surface under the cursor — object stays at that world distance.
+	_grab_depth = from.distance_to(hit.position)
+	_grab_offset = item.global_position - hit.position
 	held_item = item
 	held_item.set_held(self, true)
 
 func _release_held() -> void:
 	if held_item == null or not is_instance_valid(held_item):
 		held_item = null
+		_grab_depth = 0.0
+		_grab_offset = Vector3.ZERO
 		return
-	var cam := _camera()
-	var throw_vel := Vector3.ZERO
-	if cam:
-		var mouse := get_viewport().get_mouse_position()
-		throw_vel = cam.project_ray_normal(mouse) * release_throw_strength
 	var item := held_item
 	held_item = null
+	_grab_depth = 0.0
+	_grab_offset = Vector3.ZERO
 	item.set_held(self, false)
-	item.apply_release_impulse(throw_vel)
 
-func _follow_mouse_hold_point(delta: float) -> void:
+func _drag_on_depth_plane(delta: float) -> void:
 	var cam := _camera()
 	if cam == null or held_item == null:
 		return
 	var mouse := get_viewport().get_mouse_position()
 	var origin := cam.project_ray_origin(mouse)
 	var dir := cam.project_ray_normal(mouse)
-	var target := origin + dir * hold_distance
-	var t := clampf(hold_follow_speed * delta, 0.0, 1.0)
-	held_item.global_position = held_item.global_position.lerp(target, t)
+	var target := origin + dir * _grab_depth + _grab_offset
+	held_item.drive_toward(target, hold_follow_speed, delta)
 
-func _raycast_holdable_at_mouse() -> HoldableItem:
+func _raycast_at_mouse() -> Dictionary:
 	var cam := _camera()
 	if cam == null:
-		return null
+		return {}
 	var mouse := get_viewport().get_mouse_position()
 	var from := cam.project_ray_origin(mouse)
 	var to := from + cam.project_ray_normal(mouse) * grab_range
@@ -106,8 +117,9 @@ func _raycast_holdable_at_mouse() -> HoldableItem:
 		query.exclude = [_player.get_rid()]
 	var hit := space.intersect_ray(query)
 	if hit.is_empty():
-		return null
-	return _find_holdable(hit.collider)
+		return {}
+	hit["from"] = from
+	return hit
 
 func _find_holdable(node: Object) -> HoldableItem:
 	var current: Object = node

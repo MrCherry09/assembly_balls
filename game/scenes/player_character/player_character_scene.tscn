@@ -17,9 +17,10 @@
 [ext_resource type="Script" uid="uid://dvu58wf01wils" path="res://scenes/player_character/dependencies/StateMachine/jump_state_script.gd" id="58_gwv0a"]
 [ext_resource type="Script" uid="uid://bh3rdvokmrar1" path="res://scenes/player_character/dependencies/StateMachine/inair_state_script.gd" id="59_bqtt6"]
 [ext_resource type="Script" uid="uid://bhoqhv7escpyx" path="res://scenes/player_character/dependencies/StateMachine/crouch_state_script.gd" id="60_tu3bf"]
-[ext_resource type="Script" path="res://scenes/player_character/dependencies/item_grabber.gd" id="61_grab"]
+[ext_resource type="Script" uid="uid://cmw2e0a2np2sw" path="res://scenes/player_character/dependencies/item_grabber.gd" id="61_grab"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_5yjma"]
+height = 1.9533081
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_6bkys"]
 albedo_color = Color(0.196078, 0.223529, 1, 1)
@@ -50,27 +51,24 @@ properties/0/replication_mode = 1
 properties/1/path = NodePath("CameraHolder:rotation")
 properties/1/spawn = true
 properties/1/replication_mode = 1
-properties/2/path = NodePath("CameraHolder:position")
+properties/2/path = NodePath("CharacterModel/RobotModel/AnimationPlayer:current_animation")
 properties/2/spawn = true
 properties/2/replication_mode = 1
-properties/3/path = NodePath("CharacterModel/RobotModel/AnimationPlayer:current_animation")
+properties/3/path = NodePath("CharacterModel/RobotModel/AnimationPlayer:playback_default_blend_time")
 properties/3/spawn = true
 properties/3/replication_mode = 1
-properties/4/path = NodePath("CharacterModel/RobotModel/AnimationPlayer:playback_default_blend_time")
+properties/4/path = NodePath("CharacterModel/RobotModel/AnimationPlayer:speed_scale")
 properties/4/spawn = true
 properties/4/replication_mode = 1
-properties/5/path = NodePath("CharacterModel/RobotModel/AnimationPlayer:speed_scale")
+properties/5/path = NodePath("CharacterModel:position")
 properties/5/spawn = true
 properties/5/replication_mode = 1
-properties/6/path = NodePath("CharacterModel:position")
+properties/6/path = NodePath("PlayerNick/NickLabel:text")
 properties/6/spawn = true
 properties/6/replication_mode = 1
-properties/7/path = NodePath("PlayerNick/NickLabel:text")
+properties/7/path = NodePath("CharacterModel:rotation")
 properties/7/spawn = true
 properties/7/replication_mode = 1
-properties/8/path = NodePath("CharacterModel:rotation")
-properties/8/spawn = true
-properties/8/replication_mode = 1
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_dk1he"]
 resource_name = "Material"
@@ -521,7 +519,8 @@ height = 0.3
 
 [node name="PlayerCharacter" type="CharacterBody3D" unique_id=1141353556 node_paths=PackedStringArray("nick_label") groups=["PlayerCharacter"]]
 collision_layer = 2
-collision_mask = 1
+collision_mask = 5
+collision_priority = 100.0
 floor_block_on_wall = false
 floor_max_angle = 1.13446
 floor_snap_length = 0.0
@@ -581,8 +580,17 @@ script = ExtResource("58_gwv0a")
 [node name="InairState" type="Node" parent="StateMachine" unique_id=1375662719]
 script = ExtResource("59_bqtt6")
 
-[node name="ItemGrabber" type="Node" parent="."]
+[node name="ItemGrabber" type="Node" parent="." unique_id=2029990037]
 script = ExtResource("61_grab")
+
+[node name="ItemColliderStaticBody" type="StaticBody3D" parent="." unique_id=319500249]
+transform = Transform3D(1.05, 0, 0, 0, 1.05, 0, 0, 0, 1.05, 0, 1.0128322, 0)
+collision_layer = 128
+collision_mask = 132
+
+[node name="ItemColliderWall" type="CollisionShape3D" parent="ItemColliderStaticBody" unique_id=1251193145]
+transform = Transform3D(0.99999994, 0, 0, 0, 0.99999994, 0, 0, 0, 0.99999994, 0, 0.011588395, 0)
+shape = SubResource("CapsuleShape3D_5yjma")
 
 [node name="Hitbox" type="CollisionShape3D" parent="." unique_id=1725737678]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
