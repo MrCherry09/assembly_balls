@@ -5,6 +5,8 @@
 [ext_resource type="PackedScene" uid="uid://debd8dnm3d5ik" path="res://scenes/lobby/main_menu_ui.tscn" id="2_ukx7c"]
 [ext_resource type="Material" uid="uid://cmlreoo2qwhp4" path="res://addons/JehenoAdvancedFirstPersonController(Modified)/Arts/structure_material_black.tres" id="3_5l4x7"]
 [ext_resource type="Material" uid="uid://3ub3li5nvjsw" path="res://addons/JehenoAdvancedFirstPersonController(Modified)/Arts/structure_material_orange.tres" id="4_a0ps3"]
+[ext_resource type="PackedScene" uid="uid://c7a5m8sai0jv8" path="res://scenes/items/log.tscn" id="4_e624k"]
+[ext_resource type="PackedScene" uid="uid://dk4g1pqyoyljp" path="res://scenes/items/metal_sheet.tscn" id="5_r6j1d"]
 [ext_resource type="PackedScene" uid="uid://b84t3rpy4cau8" path="res://addons/JehenoAdvancedFirstPersonController(Modified)/MovementModifiers/jumpPads/verticalJumpPad/vertical_jump_pad_scene.tscn" id="5_tsrmh"]
 [ext_resource type="PackedScene" uid="uid://ct3rwravhrwk1" path="res://addons/JehenoAdvancedFirstPersonController(Modified)/MovementModifiers/jumpPads/directionalJumpPad/directional_jump_pad_scene.tscn" id="6_sekq8"]
 [ext_resource type="PackedScene" uid="uid://djqwgcp3ehij1" path="res://addons/JehenoAdvancedFirstPersonController(Modified)/MovementModifiers/slipperyZone/slippery_zone_scene.tscn" id="7_5nxcp"]
@@ -14,7 +16,7 @@
 [ext_resource type="FontFile" uid="uid://cfsikuv13gwnw" path="res://common/fonts/Kurland.ttf" id="13_1xog8"]
 [ext_resource type="PackedScene" uid="uid://d4ejx402qfkwa" path="res://scenes/ui/steam_friends_list/invite_popup/invite_popup.tscn" id="13_7ewij"]
 [ext_resource type="PackedScene" uid="uid://ctf1yf3optph8" path="res://addons/JehenoAdvancedFirstPersonController(Modified)/MovementModifiers/gravityZone/gravity_zone_scene.tscn" id="13_y2lj0"]
-[ext_resource type="PackedScene" path="res://scenes/items/holdable_box.tscn" id="14_holdbox"]
+[ext_resource type="PackedScene" uid="uid://r3cu2l2koklc" path="res://scenes/items/holdable_box.tscn" id="14_holdbox"]
 
 [sub_resource type="Shader" id="Shader_oe3ox"]
 code = "shader_type sky;
@@ -99,8 +101,8 @@ seamless = true
 shader = SubResource("Shader_oe3ox")
 shader_parameter/clouds_sampler = SubResource("NoiseTexture2D_83dbq")
 shader_parameter/top_color = Color(2.8878452e-07, 0.524396, 0.5726978, 1)
-shader_parameter/bottom_color = Color(0, 0.3671047, 0.65850776, 1)
-shader_parameter/sun_scatter = Color(0.17254902, 0.6, 1, 1)
+shader_parameter/bottom_color = Color(0, 0, 0, 1)
+shader_parameter/sun_scatter = Color(0, 0.16579878, 0.31791928, 1)
 shader_parameter/stars_opacity = 0.0
 
 [sub_resource type="Sky" id="Sky_pvqiu"]
@@ -179,6 +181,12 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.2, 1.5, 2.4)
 
 [node name="HoldableBox3" parent="World3D/Items" unique_id=637105776 instance=ExtResource("14_holdbox")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.2, 1.5, 4)
+
+[node name="Log" parent="World3D/Items" unique_id=754231132 instance=ExtResource("4_e624k")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
+
+[node name="MetalSheet" parent="World3D/Items" unique_id=20517615 instance=ExtResource("5_r6j1d")]
+transform = Transform3D(-4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 0, 0, 1, 0, 1.5425725, 2.2093363)
 
 [node name="Environment" type="Node3D" parent="World3D" unique_id=1452747636]
 
