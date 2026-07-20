@@ -82,31 +82,45 @@ func play(anim: String,blend: float, speed: float) -> void:
 	animation_player.play(anim,blend,speed)
 
 func sync_rotations(delta: float, reference_node: Node3D = player.cam_holder, velocity: float = ROTATION_SYNC_SPEED) -> void:
-	var new_rotation_y := lerp_angle(rotation.y, reference_node.rotation.y, velocity * delta)
-	rotation.y = new_rotation_y
+	var target_yaw: float
+	if player and player.cam_holder and player.cam_holder.is_third_person:
+		# Detached free-look: follow body yaw, not camera yaw
+		target_yaw = player.character_model.rotation.y if player.character_model else player.body_yaw
+	elif reference_node:
+		target_yaw = reference_node.rotation.y
+	else:
+		return
+	rotation.y = lerp_angle(rotation.y, target_yaw, velocity * delta)
 
 func _on_peer_connected(_peer: int) -> void:
 	_update_mesh_view.call_deferred()
+
+func _on_camera_mode_changed(_is_third_person: bool) -> void:
+	_update_mesh_view()
 
 func _ready() -> void:
 	_update_mesh_view.call_deferred()
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_connected.connect(func(_id: int) -> void: if is_multiplayer_authority(): _set_mesh_color.rpc(curr_color))
+	if player and player.cam_holder:
+		player.cam_holder.camera_mode_changed.connect(_on_camera_mode_changed)
 
 func _update_mesh_view() -> void:
+	var third_person := player != null and player.cam_holder != null and player.cam_holder.is_third_person
+	var show_full_body := not is_multiplayer_authority() or third_person
 	for child in skeleton_3d.get_children():
 		child.visible = false
 		if child is MeshInstance3D:
-			child.visible = not is_multiplayer_authority() or child == limbs_and_head
+			child.visible = show_full_body or child == limbs_and_head
 	var bone_names := [
 		"Head",
 		"HeadTop",
 	]
 
 	for bone_name in bone_names:
-		var new_scale := Vector3(0,0,0) if is_multiplayer_authority() else Vector3.ONE
+		var new_scale := Vector3.ONE if show_full_body else Vector3.ZERO
 		var bone_index := skeleton_3d.find_bone(bone_name)
-		if bone_index >= 0: skeleton_3d.set_bone_pose_scale(skeleton_3d.find_bone(bone_name),new_scale)
+		if bone_index >= 0: skeleton_3d.set_bone_pose_scale(bone_index, new_scale)
 	if is_multiplayer_authority():
 		_set_mesh_color.rpc(Online.personal_player_data.color)
 

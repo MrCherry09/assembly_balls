@@ -11,7 +11,7 @@ var move_accel: float
 var move_deccel: float
 var input_direction: Vector2:
 	get:
-		if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED: return Vector2.ZERO
+		if not _can_accept_move_input(): return Vector2.ZERO
 		else: return input_direction
 var move_direction: Vector3
 var desired_move_speed: float
@@ -155,6 +155,11 @@ var fall_gravity: float: get = get_fall_gravity
 var jump_gravity: float: get = get_jump_gravity
 
 
+@export_group("Third person body")
+## How quickly the body turns to face movement in third person (detached camera).
+@export var third_person_turn_speed: float = 12.0
+var body_yaw: float = 0.0
+
 @export_group("Keybind variables")
 @export var move_forward_action: StringName = "play_char_move_forward_action"
 @export var move_backward_action: StringName = "play_char_move_backward_action"
@@ -188,6 +193,12 @@ var default_input_actions : Dictionary
 @onready var right_wall_check : RayCast3D = %RightWallCheck
 @onready var character_model: Node3D = %CharacterModel
 
+## First person needs a captured mouse. Third person can move with a free cursor (orbit is RMB-hold).
+func _can_accept_move_input() -> bool:
+	if cam_holder and cam_holder.is_third_person:
+		return true
+	return Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+
 func _ready() -> void:
 	if not is_multiplayer_authority(): cam_holder.camera.clear_current(); return
 	
@@ -212,6 +223,9 @@ func _ready() -> void:
 	
 	build_default_keybinding()
 	input_actions_check()
+	body_yaw = cam_holder.rotation.y
+	if cam_holder:
+		cam_holder.camera_mode_changed.connect(_on_camera_mode_changed_for_body)
 	
 func build_default_keybinding() -> void:
 	#build it in runtime to ensure that export variables have been set
@@ -249,7 +263,33 @@ func input_actions_check() -> void:
 					input_event_key.physical_keycode = keycode
 					InputMap.action_add_event(input_action, input_event_key)
 	
-func _update_model_visuals() -> void: character_model.rotation_degrees.y = cam_holder.rotation_degrees.y
+func _on_camera_mode_changed_for_body(is_third_person: bool) -> void:
+	if is_third_person:
+		# Keep current body facing when entering detached free-look
+		body_yaw = character_model.rotation.y
+	else:
+		# Lock body back to camera yaw in first person
+		body_yaw = cam_holder.rotation.y
+		character_model.rotation.y = body_yaw
+
+func _yaw_from_direction(dir: Vector3) -> float:
+	# Match CameraHolder yaw convention (model forward = -Z)
+	return atan2(-dir.x, -dir.z)
+
+func _update_model_visuals(delta: float) -> void:
+	if multiplayer.has_multiplayer_peer() and not is_multiplayer_authority():
+		return
+	if cam_holder.is_third_person:
+		# Detached camera: only turn the body when there is move input
+		var face_dir := move_direction
+		face_dir.y = 0.0
+		if face_dir.length_squared() > 0.0001:
+			var target_yaw := _yaw_from_direction(face_dir.normalized())
+			body_yaw = lerp_angle(body_yaw, target_yaw, clampf(third_person_turn_speed * delta, 0.0, 1.0))
+		character_model.rotation.y = body_yaw
+	else:
+		body_yaw = cam_holder.rotation.y
+		character_model.rotation.y = body_yaw
 
 func _update_nick_label() -> void:
 	nick_label.visible = multiplayer.has_multiplayer_peer() and not is_multiplayer_authority()
@@ -268,7 +308,7 @@ func _update_nick_label() -> void:
 
 func _process(delta: float) -> void:
 	
-	_update_model_visuals()
+	_update_model_visuals(delta)
 	
 	_update_nick_label()
 

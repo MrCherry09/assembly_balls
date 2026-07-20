@@ -1,11 +1,28 @@
 extends Node3D
 class_name CameraObject 
 
+signal camera_mode_changed(is_third_person: bool)
+
 #camera variables
 @export_group("Camera variables")
 @export_range(0.0, 0.5, 0.001) var look_sensitivity : float = 0.05
 @export_range(5.0, 175.0, 0.01) var cam_fov : float = 90.0: get = get_cam_fov
-@export var max_view_angles : Vector2 = Vector2(-90,90) #in degrees
+@export var max_view_angles : Vector2 = Vector2(-89.0, 89.0) #in degrees; keep inside ±90 to avoid euler flips
+const PITCH_LIMIT_DEG := 89.0
+
+@export_group("Camera mode")
+## When true, camera orbits behind the player instead of sitting at the face link.
+@export var is_third_person: bool = false:
+	set(value):
+		if is_third_person == value: return
+		is_third_person = value
+		_apply_camera_mode()
+@export_range(1.0, 12.0, 0.1) var third_person_distance: float = 3.5
+@export_range(-1.0, 2.0, 0.05) var third_person_height: float = 0.35
+@export_range(-2.0, 2.0, 0.05) var third_person_shoulder_offset: float = 0.45
+@export_range(0.05, 1.0, 0.01) var third_person_collision_margin: float = 0.2
+@export var third_person_collision_mask: int = 1
+@export var toggle_camera_mode_action: StringName = &"play_char_toggle_camera_mode"
 
 @export_group("fov variables")
 @export var state_fovs_map : Dictionary[String, Vector2] = {
@@ -65,11 +82,16 @@ var step_timer : float = 0.0
 
 @export_group("Mouse variables")
 var mouse_free : bool = false
+var _third_person_orbiting: bool = false
+## Absolute look angles — never use rotate_x for pitch or eulers can flip past vertical.
+var _look_yaw: float = 0.0
+var _look_pitch: float = 0.0
+var _pitch_tilt_offset: float = 0.0
 
 @export_group("Keybind variables")
 @export var zoom_action : StringName = "play_char_zoom_action"
 @export var mouse_mode_action : StringName = "play_char_mouse_mode_action"
-@onready var input_actions_list : Array[StringName] = [zoom_action, mouse_mode_action]
+@onready var input_actions_list : Array[StringName] = [zoom_action, mouse_mode_action, toggle_camera_mode_action]
 @export var check_on_ready_if_inputs_registered : bool = true
 var default_input_actions : Dictionary
 
@@ -79,15 +101,28 @@ var state : String
 @onready var camera : Camera3D = $Camera
 @onready var play_char : PlayerCharacter = $".."
 @onready var hud : CanvasLayer = $"../HUD"
+@onready var camera_based_raycasts: Node3D = $Camera/CameraBasedRaycasts
 @export var link_to: Node3D
 func _ready() -> void:
 	#if _window_focused: Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED) #set mouse mode as captured
 	camera.fov = cam_fov
+	_look_yaw = rotation.y
+	_look_pitch = camera.rotation.x
+	_keep_wall_raycasts_on_pivot()
 	build_default_keybinding()
 	input_actions_check()
 	var activate_camera: bool = not multiplayer or is_multiplayer_authority()
 	_update_camera_current.call_deferred(activate_camera)
-	_update_input_capture.call_deferred(activate_camera)
+	_apply_camera_mode.call_deferred()
+	_apply_look_rotation()
+
+## Wallrun raycasts must stay at the player pivot; otherwise third-person offset breaks them.
+func _keep_wall_raycasts_on_pivot() -> void:
+	if not camera_based_raycasts: return
+	if camera_based_raycasts.get_parent() == self: return
+	var global_xf := camera_based_raycasts.global_transform
+	camera_based_raycasts.reparent(self)
+	camera_based_raycasts.global_transform = global_xf
 
 func _update_camera_current(should_be_current: bool) -> void:
 	if should_be_current: camera.make_current()
@@ -98,7 +133,8 @@ func build_default_keybinding() -> void:
 	#build it in runtime to ensure that export variables have been set
 	default_input_actions = {
 		zoom_action : [Key.KEY_Z],
-		mouse_mode_action : [Key.KEY_ESCAPE]
+		mouse_mode_action : [Key.KEY_ESCAPE],
+		toggle_camera_mode_action : [Key.KEY_V],
 	}
 
 func input_actions_check() -> void:
@@ -123,33 +159,121 @@ func input_actions_check() -> void:
 					input_event_key.physical_keycode = keycode
 					InputMap.action_add_event(input_action, input_event_key)
 
+func _get_pitch_limits_rad() -> Vector2:
+	var lo_deg := maxf(max_view_angles.x, -PITCH_LIMIT_DEG)
+	var hi_deg := minf(max_view_angles.y, PITCH_LIMIT_DEG)
+	return Vector2(deg_to_rad(lo_deg), deg_to_rad(hi_deg))
+
+func _clamp_look_pitch() -> void:
+	var limits := _get_pitch_limits_rad()
+	_look_pitch = clampf(_look_pitch, limits.x, limits.y)
+
+func _apply_look_rotation() -> void:
+	_clamp_look_pitch()
+	rotation.y = _look_yaw
+	# Holder pitch must stay 0 — only yaw + roll (tilt/bob) live here
+	rotation.x = 0.0
+	var limits := _get_pitch_limits_rad()
+	var pitched := clampf(_look_pitch + _pitch_tilt_offset, limits.x, limits.y)
+	camera.rotation = Vector3(pitched, 0.0, 0.0)
+
+func _can_look_with_mouse() -> bool:
+	if is_third_person:
+		return _third_person_orbiting
+	return Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+
 func _handle_mouse_motion(event: InputEventMouseMotion) -> void:
-	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED: return
-	rotate_y(-event.relative.x * (look_sensitivity / 10))
-	camera.rotate_x(-event.relative.y * (look_sensitivity / 10))
-	#use of deg_to_rad, because we change the x axis rotation with rotation,x, which use radians instead of degrees
-	camera.rotation.x = clamp(camera.rotation.x, deg_to_rad(max_view_angles.x), deg_to_rad(max_view_angles.y))
+	if not _can_look_with_mouse(): return
+	var sensitivity := look_sensitivity / 10.0
+	_look_yaw -= event.relative.x * sensitivity
+	_look_pitch -= event.relative.y * sensitivity
+	_apply_look_rotation()
 	get_viewport().set_input_as_handled()
+
+func _set_third_person_orbiting(orbiting: bool) -> void:
+	_third_person_orbiting = orbiting
+	_update_input_capture(orbiting)
 
 func _unhandled_input(event) -> void:
 	if multiplayer and not is_multiplayer_authority(): return
 	#manage camera rotation (360 on x axis, blocked at specified values on y axis, to not having the character do a complete head turn, which will be kinda weird)
-	if event is InputEventMouseMotion: _handle_mouse_motion(event)
-	elif event.is_action_pressed("ui_cancel"): _update_input_capture(false)
+	if event is InputEventMouseMotion:
+		_handle_mouse_motion(event)
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
+		if is_third_person:
+			_set_third_person_orbiting(event.pressed)
+			get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("ui_cancel"):
+		if is_third_person:
+			_set_third_person_orbiting(false)
+		else:
+			_update_input_capture(false)
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		_update_input_capture(true)
+		# First person only: click to recapture. Third person uses right-click hold to orbit.
+		if not is_third_person:
+			_update_input_capture(true)
+	elif event.is_action_pressed(toggle_camera_mode_action):
+		is_third_person = not is_third_person
+		get_viewport().set_input_as_handled()
 
 func _process(delta : float) -> void:
 	state = play_char.state_machine.curr_state_name
 	
-	tilt(delta)
+	if not is_third_person:
+		tilt(delta)
+		bob(delta)
+	elif camera.v_offset != 0.0:
+		camera.v_offset = move_toward(camera.v_offset, 0.0, cam_v_offset_to_0_speed * delta)
+		rotation_degrees.z = lerp(rotation_degrees.z, 0.0, 10.0 * delta)
 	
-	bob(delta)
+	_apply_look_rotation()
 	
 	zoom()
 	
+	_update_camera_position()
+
+func toggle_camera_mode() -> void:
+	is_third_person = not is_third_person
+
+func _apply_camera_mode() -> void:
+	if not is_node_ready() or not camera: return
+	if not is_third_person:
+		camera.position = Vector3.ZERO
+		camera.v_offset = 0.0
+		_third_person_orbiting = false
+		_update_input_capture(true)
+	else:
+		_set_third_person_orbiting(false)
+	_apply_look_rotation()
+	camera_mode_changed.emit(is_third_person)
+
+func _update_camera_position() -> void:
+	if is_third_person:
+		_update_third_person_camera_position()
+	elif link_to:
+		camera.global_position = link_to.global_position
+
+func _update_third_person_camera_position() -> void:
+	var pitch := _look_pitch
+	var desired_local := Vector3(
+		third_person_shoulder_offset,
+		-sin(pitch) * third_person_distance + third_person_height,
+		cos(pitch) * third_person_distance
+	)
+	var pivot_global := global_position
+	if link_to:
+		pivot_global = link_to.global_position
+	var desired_global := global_transform * desired_local
 	
-	if link_to: camera.global_position = link_to.global_position# + link_to.position.y * Vector3.UP
+	var space := get_world_3d().direct_space_state
+	var query := PhysicsRayQueryParameters3D.create(pivot_global, desired_global)
+	query.collision_mask = third_person_collision_mask
+	query.exclude = [play_char.get_rid()]
+	var hit := space.intersect_ray(query)
+	if hit:
+		camera.global_position = hit.position + hit.normal * third_person_collision_margin
+	else:
+		camera.global_position = desired_global
 		
 func tilt(delta : float) -> void:
 	if state != "Fly" and state != "Slide" and state != "Wallrun":
@@ -165,12 +289,10 @@ func tilt(delta : float) -> void:
 			#forward or backward input
 			if has_started_moving_forward or has_started_moving_backward:
 				reset_tween()
-				var cam_x_rot_pre_tween : float = rotation.x
-				var tilt_offset : float = clamp((-play_char.input_direction.y * play_char.move_speed) / forward_move_tilt_divider, -forward_move_max_tilt_val, forward_move_max_tilt_val)
-				var tilt_target : float = clamp(cam_x_rot_pre_tween - tilt_offset, deg_to_rad(max_view_angles.x), deg_to_rad(max_view_angles.y))
+				var tilt_offset : float = deg_to_rad(clamp((-play_char.input_direction.y * play_char.move_speed) / forward_move_tilt_divider, -forward_move_max_tilt_val, forward_move_max_tilt_val))
 				
-				tilt_tween.tween_property(self, "rotation:x", tilt_target, forward_move_tilt_duration).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-				tilt_tween.tween_property(self, "rotation:x", cam_x_rot_pre_tween, forward_move_tilt_duration).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+				tilt_tween.tween_property(self, "_pitch_tilt_offset", -tilt_offset, forward_move_tilt_duration).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+				tilt_tween.tween_property(self, "_pitch_tilt_offset", 0.0, forward_move_tilt_duration).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 				
 				tilt_tween.finished.connect(Callable(tilt_tween, "kill"))
 		
@@ -197,6 +319,7 @@ func reset_tween():
 	if tilt_tween and tilt_tween.is_running():
 		tilt_tween.kill()
 	tilt_tween = create_tween()
+	_pitch_tilt_offset = 0.0
 	
 #I blatantly copy pasted this code from StayAtHomeDev's "Godot FPS Series #2 - Camera effects" video
 #for more in depth explanation of what this code does, and why, check his video
@@ -212,18 +335,12 @@ func bob(delta : float) -> void:
 	var bob_sinus : float = sin(step_timer * 2.0 * PI) * 0.5
 	
 	#ceiling check raycast used here to avoid camera clipping through ceiling when for example, play char is crouching
+	# Pitch bob is applied on roll/v_offset only — never on look pitch — so it can't flip the camera past vertical
 	if enable_headbob and state != "Idle" and state != "Jump" and state != "Slide" and state != "Dash" and state != "Fly" and state != "Wallrun" and !play_char.ceiling_check.is_colliding():
 		#the bobbing scale is related to the player character movement speed
 		
-		#convert bob_pitch and bob_roll from degrees to radians, for a smoother bobbing effect
-		
-		var pitch_delta : float = bob_sinus * deg_to_rad(bob_pitch) * bob_speed
-		var pitch_delta_apply : float = clamp(rotation_degrees.x - pitch_delta, max_view_angles.x, max_view_angles.y)
-		rotation_degrees.x = pitch_delta_apply
-		
 		var roll_delta : float = bob_sinus * deg_to_rad(bob_roll) * bob_speed
-		var roll_delta_apply : float = clamp(rotation_degrees.z - roll_delta, max_view_angles.x, max_view_angles.y)
-		rotation_degrees.z = roll_delta_apply
+		rotation_degrees.z = clamp(rotation_degrees.z - rad_to_deg(roll_delta), -side_move_max_tilt_val * 2.0, side_move_max_tilt_val * 2.0)
 		
 		var bob_height : float = (bob_sinus * bob_speed) / bob_height_divider
 		camera.v_offset += bob_height
@@ -296,7 +413,10 @@ func get_cam_fov() -> float:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
-		_update_input_capture(false)
+		if is_third_person:
+			_set_third_person_orbiting(false)
+		else:
+			_update_input_capture(false)
 
 func _update_input_capture(capture_input: bool) -> void:
 	if not is_multiplayer_authority(): return

@@ -29,13 +29,49 @@ class_name HUD
 @onready var current_fov_label_text: Label = %CurrentFOVLabelText
 @onready var camera_bob_vertical_offset_label_text: Label = %CameraBobVerticalOffsetLabelText
 @onready var speed_lines_container: ColorRect = %SpeedLinesContainer
+var camera_mode_label: Label
 
-func _ready() -> void: _cicle_ui(0)
+func _ready() -> void:
+	_cicle_ui(0)
+	_setup_camera_mode_label()
+	if play_char and play_char.cam_holder:
+		play_char.cam_holder.camera_mode_changed.connect(_on_camera_mode_changed)
+		_on_camera_mode_changed(play_char.cam_holder.is_third_person)
+
+func _setup_camera_mode_label() -> void:
+	camera_mode_label = Label.new()
+	camera_mode_label.name = "CameraModeLabel"
+	camera_mode_label.position = Vector2(16, 16)
+	camera_mode_label.add_theme_font_size_override("font_size", 18)
+	camera_mode_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	camera_mode_label.add_theme_constant_override("outline_size", 4)
+	add_child(camera_mode_label)
+
+func _on_camera_mode_changed(is_third_person: bool) -> void:
+	if camera_mode_label:
+		if is_third_person:
+			camera_mode_label.text = "Camera: Third Person [V]  |  Hold RMB to look"
+		else:
+			camera_mode_label.text = "Camera: First Person [V]"
+	if crosshair:
+		crosshair.visible = not is_third_person and _should_show_crosshair()
+
+func _should_show_crosshair() -> bool:
+	# Match the HUD cycle matrix: crosshair is column index 2
+	var components_states_matrix: Array[Array] = [
+		[false, true, true],
+		[true, true, true],
+		[false, false, false],
+		[false, false, true],
+	]
+	return components_states_matrix[_ui_cicle_index][2]
 
 func _process(_delta : float) -> void:
 	if multiplayer.has_multiplayer_peer() and not is_multiplayer_authority(): if visible: hide(); return
 	display_current_FPS()
 	display_properties()
+	if camera_mode_label and not camera_mode_label.visible:
+		camera_mode_label.visible = true
 
 func display_properties() -> void:
 	#player character properties
@@ -83,7 +119,13 @@ func _cicle_ui(new_cicle_index: int = _ui_cicle_index + 1) -> void:
 	]
 	_ui_cicle_index = wrapi(new_cicle_index,0,components_states_matrix.size())
 	for i in ui_components.size():
-		ui_components[i].visible = components_states_matrix[_ui_cicle_index][i]
+		var should_show: bool = components_states_matrix[_ui_cicle_index][i]
+		# Crosshair stays hidden in third person regardless of HUD cycle
+		if ui_components[i] == crosshair and play_char and play_char.cam_holder and play_char.cam_holder.is_third_person:
+			should_show = false
+		ui_components[i].visible = should_show
+	if camera_mode_label:
+		camera_mode_label.visible = is_multiplayer_authority()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not is_multiplayer_authority(): return
