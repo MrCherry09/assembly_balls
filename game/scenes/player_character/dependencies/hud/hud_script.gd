@@ -2,28 +2,20 @@ extends CanvasLayer
 
 class_name HUD
 
-#references
 @export var play_char: PlayerCharacter
 @export var crosshair: Control
 @export var player_info: Control
 @export var frames_info: Control
 
-#label references variables
 @onready var current_state_label_text: Label = %CurrentStateLabelText
-@onready var desired_move_speed_label_text: Label = %DesiredMoveSpeedLabelText
+@onready var move_speed_label_text: Label = %DesiredMoveSpeedLabelText
 @onready var velocity_label_text: Label = %VelocityLabelText
 @onready var velocity_vector_label_text: Label = %VelocityVectorLabelText
 @onready var is_on_floor_label_text: Label = %IsOnFloorLabelText
 @onready var ceiling_check_label_text: Label = %CeilingCheckLabelText
 @onready var jump_buffer_label_text: Label = %JumpBufferLabelText
 @onready var coyote_time_label_text: Label = %CoyoteTimeLabelText
-@onready var nb_jumps_in_air_allowed_label_text: Label = %NbJumpsInAirAllowedLabelText
 @onready var jump_cooldown_label_text: Label = %JumpCooldownLabelText
-@onready var slide_time_label_text: Label = %SlideTimeLabelText
-@onready var slide_cooldown_label_text: Label = %SlideCooldownLabelText
-@onready var nb_dashs_allowed_label_text: Label = %NbDashsAllowedLabelText
-@onready var dash_cooldown_label_text: Label = %DashCooldownLabelText
-@onready var wallrun_time_label_text: Label = %WallrunTimeLabelText
 @onready var frames_per_second_label_text: Label = %FramesPerSecondLabelText
 @onready var camera_rotation_label_text: Label = %CameraRotationLabelText
 @onready var current_fov_label_text: Label = %CurrentFOVLabelText
@@ -34,6 +26,26 @@ var look_hint_label: Label
 func _ready() -> void:
 	_cicle_ui(0)
 	_setup_look_hint_label()
+	_hide_removed_debug_rows()
+
+func _hide_removed_debug_rows() -> void:
+	for path in [
+		"PlayerInfo/PanelContainer/PlayCharInfos/VBoxContainer/NbJumpsInAirAllowedLabel",
+		"PlayerInfo/PanelContainer/PlayCharInfos/VBoxContainer/NbJumpsInAirAllowedLabelText",
+		"PlayerInfo/PanelContainer/PlayCharInfos/VBoxContainer/SlideTimeLabel",
+		"PlayerInfo/PanelContainer/PlayCharInfos/VBoxContainer/SlideTimeLabelText",
+		"PlayerInfo/PanelContainer/PlayCharInfos/VBoxContainer/SlideCooldownLabel",
+		"PlayerInfo/PanelContainer/PlayCharInfos/VBoxContainer/SlideCooldownLabelText",
+		"PlayerInfo/PanelContainer/PlayCharInfos/VBoxContainer/NbDashsAllowedLabel",
+		"PlayerInfo/PanelContainer/PlayCharInfos/VBoxContainer/NbDashsAllowedLabelText",
+		"PlayerInfo/PanelContainer/PlayCharInfos/VBoxContainer/DashCooldownLabel",
+		"PlayerInfo/PanelContainer/PlayCharInfos/VBoxContainer/DashCooldownLabelText",
+		"PlayerInfo/PanelContainer/PlayCharInfos/VBoxContainer/WallrunTimeLabel",
+		"PlayerInfo/PanelContainer/PlayCharInfos/VBoxContainer/WallrunTimeLabelText",
+	]:
+		var node := get_node_or_null(path)
+		if node:
+			node.visible = false
 
 func _setup_look_hint_label() -> void:
 	look_hint_label = Label.new()
@@ -47,7 +59,8 @@ func _setup_look_hint_label() -> void:
 
 func _process(_delta: float) -> void:
 	if multiplayer.has_multiplayer_peer() and not is_multiplayer_authority():
-		if visible: hide()
+		if visible:
+			hide()
 		return
 	display_current_FPS()
 	display_properties()
@@ -56,21 +69,14 @@ func _process(_delta: float) -> void:
 
 func display_properties() -> void:
 	current_state_label_text.set_text(str(play_char.state_machine.curr_state_name))
-	desired_move_speed_label_text.set_text(str(round_to_3_decimals(play_char.desired_move_speed)))
+	move_speed_label_text.set_text(str(round_to_3_decimals(play_char.move_speed)))
 	velocity_label_text.set_text(str(round_to_3_decimals(play_char.velocity.length())))
 	velocity_vector_label_text.set_text(str("[ ", round_to_3_decimals(play_char.velocity.x), " ", round_to_3_decimals(play_char.velocity.y), " ", round_to_3_decimals(play_char.velocity.z), " ]"))
 	is_on_floor_label_text.set_text(str(play_char.is_on_floor()))
 	ceiling_check_label_text.set_text(str(play_char.ceiling_check.is_colliding()))
 	jump_buffer_label_text.set_text(str(play_char.jump_buff_on))
 	coyote_time_label_text.set_text(str(round_to_3_decimals(play_char.coyote_jump_cooldown)))
-	nb_jumps_in_air_allowed_label_text.set_text(str(play_char.nb_jumps_in_air_allowed))
 	jump_cooldown_label_text.set_text(str(round_to_3_decimals(play_char.jump_cooldown)))
-	slide_time_label_text.set_text(str(round_to_3_decimals(play_char.slide_time)))
-	slide_cooldown_label_text.set_text(str(round_to_3_decimals(play_char.time_bef_can_slide_again)))
-	nb_dashs_allowed_label_text.set_text(str(play_char.nb_dashs_allowed))
-	dash_cooldown_label_text.set_text(str(round_to_3_decimals(play_char.time_bef_can_dash_again)))
-	wallrun_time_label_text.set_text(str(round_to_3_decimals(play_char.wallrun_time)))
-
 	camera_rotation_label_text.set_text(str("[ ", round_to_3_decimals(play_char.cam.rotation.x), " ", round_to_3_decimals(play_char.cam.rotation.y), " ", round_to_3_decimals(play_char.cam.rotation.z), " ]"))
 	current_fov_label_text.set_text(str(play_char.cam.fov))
 	camera_bob_vertical_offset_label_text.set_text(str(round_to_3_decimals(play_char.cam.v_offset)))
@@ -88,7 +94,8 @@ func round_to_3_decimals(value: float) -> float:
 var _ui_cicle_index := 0
 
 func _cicle_ui(new_cicle_index: int = _ui_cicle_index + 1) -> void:
-	if not is_multiplayer_authority(): return
+	if not is_multiplayer_authority():
+		return
 	var ui_components: Array[Node] = [player_info, frames_info, crosshair]
 	var components_states_matrix: Array[Array] = [
 		[false, true, true],
@@ -103,7 +110,8 @@ func _cicle_ui(new_cicle_index: int = _ui_cicle_index + 1) -> void:
 		look_hint_label.visible = is_multiplayer_authority()
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not is_multiplayer_authority(): return
+	if not is_multiplayer_authority():
+		return
 	if event.is_action_pressed("cicle_player_hud"):
 		_cicle_ui()
 		get_viewport().set_input_as_handled()

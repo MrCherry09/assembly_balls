@@ -36,15 +36,7 @@ func _update_animations() -> void:
 	if last_state != curr_state:
 		if curr_state is JumpState:
 			if not last_anim.containsn("Jump"):
-				if last_anim == "Wallrun":
-					anim = "WallJump"
-					speed = 1.5
-					blend = 0.1
-				elif last_anim == "Slide":
-					anim = "Jump1"
-					speed = 1.5
-					blend = 0.3
-				elif last_anim == "Crouch":
+				if last_anim == "Crouch":
 					anim = "Jump1"
 					blend = 0.3
 				else:
@@ -54,17 +46,10 @@ func _update_animations() -> void:
 		anim = "Inair"
 	if curr_state is WalkState:
 		anim = "Walk"
-	if curr_state is SlideState:
-		anim = "Slide"
 	if curr_state is RunState:
 		anim = "Run"
-	if curr_state is WallrunState:
-		anim = "Run"
-		blend = 2
 	if curr_state is CrouchState:
 		anim = "Crouch"
-	if curr_state is FlyState:
-		anim = "Fly"
 	if curr_state is IdleState:
 		anim = "Idle"
 

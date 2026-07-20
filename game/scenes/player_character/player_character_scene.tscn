@@ -2,10 +2,6 @@
 
 [ext_resource type="Script" uid="uid://d3s8yxuvpmekm" path="res://scenes/player_character/player_character_script.gd" id="1_h128t"]
 [ext_resource type="Script" uid="uid://b0fbr48rbvn27" path="res://scenes/player_character/dependencies/camera_script.gd" id="2_x12n0"]
-[ext_resource type="Script" uid="uid://8g033x6qm1rx" path="res://scenes/player_character/dependencies/StateMachine/fly_state_script.gd" id="9_ph066"]
-[ext_resource type="Script" uid="uid://hc1xroood24q" path="res://scenes/player_character/dependencies/StateMachine/slide_state_script.gd" id="10_poibi"]
-[ext_resource type="Script" uid="uid://c4skioddhqatw" path="res://scenes/player_character/dependencies/StateMachine/dash_state_script.gd" id="11_khex2"]
-[ext_resource type="Script" uid="uid://bq1stj2mujnp2" path="res://scenes/player_character/dependencies/StateMachine/wallrun_state_script.gd" id="12_5fuve"]
 [ext_resource type="LabelSettings" uid="uid://bs0stms0b56kp" path="res://addons/JehenoAdvancedFirstPersonController(Modified)/Arts/label_settings.tres" id="14_gfbru"]
 [ext_resource type="Shader" uid="uid://b34228uop3gdf" path="res://scenes/player_character/dependencies/speed_lines_shader.gdshader" id="14_jv0i6"]
 [ext_resource type="Script" uid="uid://dx02l6p6behb8" path="res://scenes/player_character/dependencies/hud/hud_script.gd" id="16_5jm78"]
@@ -21,16 +17,6 @@
 [ext_resource type="Script" uid="uid://dvu58wf01wils" path="res://scenes/player_character/dependencies/StateMachine/jump_state_script.gd" id="58_gwv0a"]
 [ext_resource type="Script" uid="uid://bh3rdvokmrar1" path="res://scenes/player_character/dependencies/StateMachine/inair_state_script.gd" id="59_bqtt6"]
 [ext_resource type="Script" uid="uid://bhoqhv7escpyx" path="res://scenes/player_character/dependencies/StateMachine/crouch_state_script.gd" id="60_tu3bf"]
-
-[sub_resource type="Curve" id="Curve_s7fsc"]
-_limits = [0.0, 30.0, 0.0, 60.0]
-_data = [Vector2(0, 10), 0.0, 0.0, 0, 0, Vector2(18.412018, 14.708975), 1.6324449, 1.6324449, 0, 0, Vector2(60, 30), 0.0, 0.0, 0, 0]
-point_count = 3
-
-[sub_resource type="Curve" id="Curve_gfbru"]
-_limits = [3.0, 30.0, 0.0, 30.0]
-_data = [Vector2(0, 3), 0.0, 0.0, 0, 0, Vector2(30, 30), 0.0, 0.0, 0, 0]
-point_count = 2
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_5yjma"]
 
@@ -539,9 +525,10 @@ floor_max_angle = 1.13446
 floor_snap_length = 0.0
 platform_floor_layers = 4278190081
 script = ExtResource("1_h128t")
-desired_move_speed_curve = SubResource("Curve_s7fsc")
-in_air_move_speed_curve = SubResource("Curve_gfbru")
 nick_label = NodePath("PlayerNick/NickLabel")
+walk_speed = 7.0
+run_speed = 10.0
+jump_height = 4.0
 
 [node name="PlayerNick" type="Node3D" parent="." unique_id=1634704510]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.40219808, 0)
@@ -571,22 +558,6 @@ far = 1000.0
 
 [node name="CameraBasedRaycasts" type="Node3D" parent="CameraHolder/Camera" unique_id=646245534]
 
-[node name="LeftWallCheck" type="RayCast3D" parent="CameraHolder/Camera/CameraBasedRaycasts" unique_id=127190812]
-unique_name_in_owner = true
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.715, 0)
-exclude_parent = false
-target_position = Vector3(1, 0, 0)
-collision_mask = 4
-debug_shape_custom_color = Color(0.91764706, 0.79607844, 0.18039216, 1)
-
-[node name="RightWallCheck" type="RayCast3D" parent="CameraHolder/Camera/CameraBasedRaycasts" unique_id=1374599851]
-unique_name_in_owner = true
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.715, 0)
-exclude_parent = false
-target_position = Vector3(-1, 0, 0)
-collision_mask = 4
-debug_shape_custom_color = Color(0.91764706, 0.79607844, 0.18039216, 1)
-
 [node name="StateMachine" type="Node" parent="." unique_id=625552977 node_paths=PackedStringArray("initial_state")]
 script = ExtResource("54_e0r17")
 initial_state = NodePath("IdleState")
@@ -608,18 +579,6 @@ script = ExtResource("58_gwv0a")
 
 [node name="InairState" type="Node" parent="StateMachine" unique_id=1375662719]
 script = ExtResource("59_bqtt6")
-
-[node name="SlideState" type="Node" parent="StateMachine" unique_id=2005603879]
-script = ExtResource("10_poibi")
-
-[node name="DashState" type="Node" parent="StateMachine" unique_id=2039042496]
-script = ExtResource("11_khex2")
-
-[node name="FlyState" type="Node" parent="StateMachine" unique_id=1375770912]
-script = ExtResource("9_ph066")
-
-[node name="WallrunState" type="Node" parent="StateMachine" unique_id=1434626049]
-script = ExtResource("12_5fuve")
 
 [node name="Hitbox" type="CollisionShape3D" parent="." unique_id=1725737678]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
@@ -644,18 +603,6 @@ target_position = Vector3(0, 3, 0)
 debug_shape_custom_color = Color(1, 0, 0, 1)
 
 [node name="FloorCheck" type="RayCast3D" parent="Raycasts" unique_id=508548313]
-unique_name_in_owner = true
-exclude_parent = false
-target_position = Vector3(0, -3, 0)
-debug_shape_custom_color = Color(0, 0.823529, 0.956863, 1)
-
-[node name="WallrunFloorCheck" type="RayCast3D" parent="Raycasts" unique_id=122534953]
-unique_name_in_owner = true
-exclude_parent = false
-target_position = Vector3(0, -1.7, 0)
-debug_shape_custom_color = Color(0, 0.3372549, 0.7176471, 1)
-
-[node name="SlideFloorCheck" type="RayCast3D" parent="Raycasts" unique_id=1866000001]
 unique_name_in_owner = true
 exclude_parent = false
 target_position = Vector3(0, -3, 0)
@@ -735,7 +682,7 @@ vertical_alignment = 1
 texture_filter = 1
 layout_mode = 2
 theme_override_font_sizes/font_size = 40
-text = "Desired move speed : "
+text = "Move speed : "
 label_settings = ExtResource("14_gfbru")
 vertical_alignment = 1
 
