@@ -11,7 +11,7 @@ const PITCH_LIMIT_DEG := 89.0
 @export_group("Third person")
 @export_range(1.0, 12.0, 0.1) var camera_distance: float = 3.5
 @export_range(-1.0, 2.0, 0.05) var camera_height: float = 0.35
-@export_range(-2.0, 2.0, 0.05) var shoulder_offset: float = 0.45
+@export_range(-2.0, 2.0, 0.05) var shoulder_offset: float = 1.05
 @export_range(0.05, 1.0, 0.01) var collision_margin: float = 0.2
 @export var collision_mask: int = 1
 ## Optional orbit pivot (e.g. head/chest). Falls back to CameraHolder origin.
@@ -64,6 +64,8 @@ var _orbiting: bool = false
 ## Absolute look angles — never use rotate_x for pitch or eulers can flip past vertical.
 var _look_yaw: float = 0.0
 var _look_pitch: float = 0.0
+var _stored_mouse_position: Vector2 = Vector2.ZERO
+var _has_stored_mouse_position: bool = false
 
 @export_group("Keybind variables")
 @export var zoom_action: StringName = "play_char_zoom_action"
@@ -283,5 +285,16 @@ func _notification(what: int) -> void:
 func _update_input_capture(capture_input: bool) -> void:
 	if not is_multiplayer_authority(): return
 	if not camera.current: return
-	if capture_input: Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-	else: Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	if capture_input:
+		# Remember free-cursor position before capture centers it
+		if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+			_stored_mouse_position = get_viewport().get_mouse_position()
+			_has_stored_mouse_position = true
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	else:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		if _has_stored_mouse_position:
+			var restore_pos := _stored_mouse_position
+			_has_stored_mouse_position = false
+			# Deferred so the OS applies VISIBLE before the warp
+			Input.warp_mouse.call_deferred(restore_pos)
