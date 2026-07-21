@@ -65,6 +65,11 @@ var jump_gravity: float: get = get_jump_gravity
 @export var aim_body_turn_speed: float = 40.0
 var body_yaw: float = 0.0
 
+@export_group("Combat")
+@export var attack_damage: float = 25.0
+@export var attack_cooldown_ms: int = 500
+@export var attack_hit_area: Vector3 = Vector3(1.0, 1.0, 1.5)
+
 @export_group("Keybinds")
 @export var move_forward_action: StringName = "play_char_move_forward_action"
 @export var move_backward_action: StringName = "play_char_move_backward_action"
@@ -234,12 +239,17 @@ func tween_model_height(state_model_height: float) -> void:
 		var size_diff: float = (base_model_height - state_model_height) / 2 / base_hitbox_height
 		character_model.position.y = size_diff
 
+var last_attack_time: int = 0
+
 func attack() -> void:
-	pass
+	var current_time := Time.get_ticks_msec()
+	if current_time - last_attack_time < attack_cooldown_ms:
+		return
+	last_attack_time = current_time
 	
 	var mesh_instance := MeshInstance3D.new()
 	var mesh := BoxMesh.new()
-	mesh.size = Vector3(1.0, 1.0, 1.5)
+	mesh.size = attack_hit_area
 	var material := StandardMaterial3D.new()
 	material.albedo_color = Color(1.0, 0.0, 0.0, 0.5)
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -250,9 +260,23 @@ func attack() -> void:
 	add_child(mesh_instance)
 	
 	var forward := -Vector3(sin(body_yaw), 0, cos(body_yaw))
-	mesh_instance.position = Vector3(0, base_hitbox_height / 2.0, 0) + forward * 1.0
+	var local_pos := Vector3(0, base_hitbox_height / 2.0, 0) + forward * 1.0
+	mesh_instance.position = local_pos
 	mesh_instance.rotation.y = body_yaw
 	
 	var tween := create_tween()
 	tween.tween_property(material, "albedo_color:a", 0.0, 0.2)
 	tween.tween_callback(mesh_instance.queue_free)
+	
+	var space_state := get_world_3d().direct_space_state
+	var query := PhysicsShapeQueryParameters3D.new()
+	var box_shape := BoxShape3D.new()
+	box_shape.size = mesh.size
+	query.shape = box_shape
+	query.transform = global_transform * Transform3D(Basis().rotated(Vector3.UP, body_yaw), local_pos)
+	
+	var results := space_state.intersect_shape(query)
+	for result in results:
+		var collider = result.get("collider")
+		if collider and collider.has_method("take_damage") and collider != self:
+			collider.take_damage(attack_damage)

@@ -17,6 +17,7 @@
 [ext_resource type="PackedScene" uid="uid://d4ejx402qfkwa" path="res://scenes/ui/steam_friends_list/invite_popup/invite_popup.tscn" id="13_7ewij"]
 [ext_resource type="PackedScene" uid="uid://ctf1yf3optph8" path="res://addons/JehenoAdvancedFirstPersonController(Modified)/MovementModifiers/gravityZone/gravity_zone_scene.tscn" id="13_y2lj0"]
 [ext_resource type="PackedScene" uid="uid://r3cu2l2koklc" path="res://scenes/items/holdable_box.tscn" id="14_holdbox"]
+[ext_resource type="PackedScene" uid="uid://chtcibow20wsp" path="res://scenes/env/tree.tscn" id="18_4pl0j"]
 
 [sub_resource type="Shader" id="Shader_oe3ox"]
 code = "shader_type sky;
@@ -710,6 +711,9 @@ offset_bottom = 150.0
 grow_horizontal = 2
 pivot_offset_ratio = Vector2(0.5, 0.5)
 mouse_filter = 2
+
+[node name="Tree" parent="." unique_id=210168993 instance=ExtResource("18_4pl0j")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.4234533, 1.9999999, -0.8795631)
 
 [connection signal="pressed" from="CanvasLayer/UI/InGameUI/Panel/MarginContainer/VBoxContainer/ExitLobbyButton" to="." method="_on_exit_lobby_button_pressed"]
 [connection signal="pressed" from="CanvasLayer/UI/InGameUI/Panel/MarginContainer/VBoxContainer/LobbyInfoButton" to="." method="_on_lobby_info_button_pressed"]

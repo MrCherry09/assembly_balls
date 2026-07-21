@@ -528,6 +528,9 @@ script = ExtResource("1_h128t")
 nick_label = NodePath("PlayerNick/NickLabel")
 walk_speed = 5.0
 jump_height = 4.0
+attack_damage = 20.0
+attack_cooldown_ms = 700
+attack_hit_area = Vector3(1, 1.5, 1.5)
 
 [node name="PlayerNick" type="Node3D" parent="." unique_id=1634704510]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.40219808, 0)
