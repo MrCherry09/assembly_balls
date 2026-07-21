@@ -4,9 +4,9 @@ class_name HUD
 
 const INVENTORY_TOGGLE_ACTION: StringName = &"toggle_inventory"
 const INVENTORY_PICKUP_ACTION: StringName = &"pickup_holdable_item"
-const INVENTORY_SLOT_COUNT: int = 30
-const INVENTORY_COLUMNS: int = 5
-const INVENTORY_HEIGHT_SCALE: float = 0.5
+@export var INVENTORY_SLOT_COUNT: int = 30
+@export var INVENTORY_COLUMNS: int = 5
+@export var INVENTORY_HEIGHT_SCALE: float = 0.5
 const DEFAULT_INVENTORY_ICON: Texture2D = preload("res://icon.png")
 
 @export var play_char: PlayerCharacter
