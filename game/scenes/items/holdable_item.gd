@@ -11,6 +11,9 @@ class_name HoldableItem
 ## Heavier fall than default project gravity so thrown props drop quickly.
 @export var free_gravity_scale: float = 2.4
 
+@export_group("Inventory")
+@export var inventory_icon: Texture2D
+
 const LAYER_WORLD := 1
 const LAYER_HOLDABLE := 4
 

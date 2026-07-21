@@ -1060,6 +1060,74 @@ text = "FPS"
 label_settings = ExtResource("14_gfbru")
 vertical_alignment = 1
 
+[node name="InventoryRoot" type="Control" parent="HUD" unique_id=1846803456]
+unique_name_in_owner = true
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+visible = false
+
+[node name="InventoryPanel" type="PanelContainer" parent="HUD/InventoryRoot" unique_id=1846803457]
+unique_name_in_owner = true
+mouse_filter = 2
+theme_override_styles/panel = ExtResource("18_ovq28")
+
+[node name="MarginContainer" type="MarginContainer" parent="HUD/InventoryRoot/InventoryPanel" unique_id=1846803458]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="VBoxContainer" type="VBoxContainer" parent="HUD/InventoryRoot/InventoryPanel/MarginContainer" unique_id=1846803459]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/separation = 14
+
+[node name="HBoxContainer" type="HBoxContainer" parent="HUD/InventoryRoot/InventoryPanel/MarginContainer/VBoxContainer" unique_id=1846803460]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="InventoryTitleLabel" type="Label" parent="HUD/InventoryRoot/InventoryPanel/MarginContainer/VBoxContainer/HBoxContainer" unique_id=1846803461]
+layout_mode = 2
+size_flags_horizontal = 3
+texture_filter = 1
+theme_override_font_sizes/font_size = 40
+text = "INVENTORY"
+label_settings = ExtResource("14_gfbru")
+vertical_alignment = 1
+
+[node name="InventoryHintLabel" type="Label" parent="HUD/InventoryRoot/InventoryPanel/MarginContainer/VBoxContainer/HBoxContainer" unique_id=1846803462]
+layout_mode = 2
+texture_filter = 1
+theme_override_font_sizes/font_size = 22
+text = "Press Tab to close"
+label_settings = ExtResource("14_gfbru")
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="HSeparator3" type="HSeparator" parent="HUD/InventoryRoot/InventoryPanel/MarginContainer/VBoxContainer" unique_id=1846803463]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 12
+
+[node name="InventorySlotsGrid" type="GridContainer" parent="HUD/InventoryRoot/InventoryPanel/MarginContainer/VBoxContainer" unique_id=1846803464]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+columns = 5
+theme_override_constants/h_separation = 10
+theme_override_constants/v_separation = 10
+
 [node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="." unique_id=968302536]
 replication_config = SubResource("SceneReplicationConfig_bnids")
 

@@ -4,6 +4,8 @@ class_name ItemGrabber
 ## Free-cursor grab: LMB picks an item; mouse moves it on a depth plane in world space.
 ## Release keeps the item's current velocity so a flick throws it.
 
+const PICKUP_ACTION: StringName = &"pickup_holdable_item"
+
 @export var grab_range: float = 8.0
 @export var hold_follow_speed: float = 12.0
 ## Scales release velocity (1 = keep drag speed as-is).
@@ -12,6 +14,8 @@ class_name ItemGrabber
 @export var throw_max_speed: float = 15.0
 ## Must match HoldableItem.LAYER_HOLDABLE (physics layer bit 4).
 @export var grab_collision_mask: int = 4
+## Depth used when spawning an item from the inventory into a held state.
+@export var inventory_drag_depth: float = 3.0
 
 var held_item: HoldableItem = null
 var _grab_held: bool = false
@@ -23,6 +27,20 @@ var _grab_offset: Vector3 = Vector3.ZERO
 var _throw_velocity: Vector3 = Vector3.ZERO
 
 @onready var _player: PlayerCharacter = get_parent() as PlayerCharacter
+
+func _ready() -> void:
+	_ensure_pickup_action()
+
+func _ensure_pickup_action() -> void:
+	if not InputMap.has_action(PICKUP_ACTION):
+		InputMap.add_action(PICKUP_ACTION)
+	else:
+		InputMap.action_erase_events(PICKUP_ACTION)
+
+	var input_event_key := InputEventKey.new()
+	input_event_key.keycode = Key.KEY_E
+	input_event_key.physical_keycode = Key.KEY_E
+	InputMap.action_add_event(PICKUP_ACTION, input_event_key)
 
 func _camera() -> Camera3D:
 	if _player and _player.cam:
@@ -41,12 +59,20 @@ func _is_local_player() -> bool:
 		return _player.is_multiplayer_authority()
 	return true
 
+func _hud() -> HUD:
+	if _player == null:
+		return null
+	return _player.hud as HUD
+
 func _input(event: InputEvent) -> void:
 	if not _is_local_player():
 		return
 	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT):
 		return
 	if event.pressed:
+		var hud := _hud()
+		if hud and hud.is_point_over_inventory_ui(event.position):
+			return
 		if _look_busy():
 			return
 		_grab_held = true
@@ -54,6 +80,14 @@ func _input(event: InputEvent) -> void:
 	else:
 		_grab_held = false
 		_release_held()
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not _is_local_player():
+		return
+	if not event.is_action_pressed(PICKUP_ACTION):
+		return
+	_try_pickup_to_inventory()
+	get_viewport().set_input_as_handled()
 
 func _physics_process(delta: float) -> void:
 	if not _is_local_player():
@@ -93,6 +127,57 @@ func _try_grab() -> void:
 	_throw_velocity = Vector3.ZERO
 	held_item = item
 	held_item.set_held(self, true)
+
+func _try_pickup_to_inventory() -> void:
+	var hud := _hud()
+	if hud == null:
+		return
+
+	if held_item != null and is_instance_valid(held_item):
+		if hud.try_add_holdable_item(held_item):
+			var item := held_item
+			held_item = null
+			_grab_held = false
+			_grab_depth = 0.0
+			_grab_offset = Vector3.ZERO
+			_throw_velocity = Vector3.ZERO
+			item.queue_free()
+		return
+
+	var cam := _camera()
+	if cam == null:
+		return
+	var hit := _raycast_at_mouse()
+	if hit.is_empty():
+		return
+	var item := _find_holdable(hit.collider)
+	if item == null or item.is_held:
+		return
+	if hud.try_add_holdable_item(item):
+		item.queue_free()
+
+func begin_inventory_drag(item: HoldableItem) -> bool:
+	if not _is_local_player():
+		return false
+	if item == null or held_item != null:
+		return false
+	var cam := _camera()
+	if cam == null:
+		return false
+
+	var mouse := _drag_cursor_vp()
+	var origin := cam.project_ray_origin(mouse)
+	var dir := cam.project_ray_normal(mouse)
+	var target := origin + dir * inventory_drag_depth
+
+	held_item = item
+	_grab_held = true
+	_grab_depth = origin.distance_to(target)
+	_grab_offset = Vector3.ZERO
+	_throw_velocity = Vector3.ZERO
+	held_item.global_position = target
+	held_item.set_held(self, true)
+	return true
 
 func _release_held() -> void:
 	if held_item == null or not is_instance_valid(held_item):

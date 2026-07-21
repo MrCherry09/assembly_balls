@@ -64,6 +64,7 @@ collision_mask = 5
 script = ExtResource("1_ekc8o")
 mesh_instance = NodePath("LogPivot/Wood_Piece_5_Wood_0")
 mass_kg = 10.0
+inventory_icon = ExtResource("2_eqxgs")
 metadata/_custom_type_script = "uid://l4bk87lb5lf3"
 
 [node name="LogPivot" type="Node3D" parent="." unique_id=938275796]

@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://r3cu2l2koklc"]
 
 [ext_resource type="Script" uid="uid://l4bk87lb5lf3" path="res://scenes/items/holdable_item.gd" id="1_item"]
+[ext_resource type="Texture2D" uid="uid://b4fhi37rseyar" path="res://models/common/wood_pile_pack_1.png" id="2_icon"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_box"]
 size = Vector3(0.6, 0.6, 0.6)
@@ -19,6 +20,7 @@ continuous_cd = true
 script = ExtResource("1_item")
 mesh_instance = NodePath("MeshInstance3D")
 mass_kg = 10.0
+inventory_icon = ExtResource("2_icon")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1780327988]
 mesh = SubResource("BoxMesh_box")
