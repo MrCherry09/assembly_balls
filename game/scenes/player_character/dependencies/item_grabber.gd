@@ -74,9 +74,13 @@ func _input(event: InputEvent) -> void:
 		if hud and hud.is_point_over_inventory_ui(event.position):
 			return
 		if _look_busy():
+			if held_item == null and _player.has_method("attack"):
+				_player.attack()
 			return
 		_grab_held = true
-		_try_grab()
+		if not _try_grab() and held_item == null:
+			if _player.has_method("attack"):
+				_player.attack()
 	else:
 		_grab_held = false
 		_release_held()
@@ -107,18 +111,18 @@ func _drag_cursor_vp() -> Vector2:
 		return _player.cam_holder.get_drag_cursor_vp()
 	return get_viewport().get_mouse_position()
 
-func _try_grab() -> void:
+func _try_grab() -> bool:
 	if held_item != null:
-		return
+		return false
 	var cam := _camera()
 	if cam == null:
-		return
+		return false
 	var hit := _raycast_at_mouse()
 	if hit.is_empty():
-		return
+		return false
 	var item := _find_holdable(hit.collider)
 	if item == null or item.is_held:
-		return
+		return false
 	var mouse := _drag_cursor_vp()
 	var from: Vector3 = hit.from if hit.has("from") else cam.project_ray_origin(mouse)
 	# Lock depth at the surface under the cursor — object stays at that world distance.
@@ -127,6 +131,7 @@ func _try_grab() -> void:
 	_throw_velocity = Vector3.ZERO
 	held_item = item
 	held_item.set_held(self, true)
+	return true
 
 func _try_pickup_to_inventory() -> void:
 	var hud := _hud()

@@ -233,3 +233,26 @@ func tween_model_height(state_model_height: float) -> void:
 	if character_model:
 		var size_diff: float = (base_model_height - state_model_height) / 2 / base_hitbox_height
 		character_model.position.y = size_diff
+
+func attack() -> void:
+	pass
+	
+	var mesh_instance := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(1.0, 1.0, 1.5)
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(1.0, 0.0, 0.0, 0.5)
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mesh.material = material
+	mesh_instance.mesh = mesh
+	
+	add_child(mesh_instance)
+	
+	var forward := -Vector3(sin(body_yaw), 0, cos(body_yaw))
+	mesh_instance.position = Vector3(0, base_hitbox_height / 2.0, 0) + forward * 1.0
+	mesh_instance.rotation.y = body_yaw
+	
+	var tween := create_tween()
+	tween.tween_property(material, "albedo_color:a", 0.0, 0.2)
+	tween.tween_callback(mesh_instance.queue_free)
