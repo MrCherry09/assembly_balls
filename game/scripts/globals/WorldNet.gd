@@ -6,9 +6,9 @@ extends Node
 const HOLD_FOLLOW_SPEED := 12.0
 const GRAB_RANGE := 12.0
 const PICKUP_RANGE := 12.0
-## Steam peers often drop unreliable RPCs; send poses on the reliable channel.
-## Held items sync every physics tick; free items at this interval.
+## Steam peers often drop unreliable RPCs; send poses on the reliable channel at a capped rate.
 const POSE_SYNC_INTERVAL_SEC := 0.05
+const POSE_SYNC_HELD_INTERVAL_SEC := 0.025
 const POSE_STRIDE := 11 # id, px,py,pz, rx,ry,rz, holder, vx,vy,vz
 
 signal item_held(item_id: int, peer_id: int)
@@ -161,72 +161,42 @@ func get_tree_by_id(tree_id: int) -> TreePlaceholder:
 	return null
 
 func _physics_process(delta: float) -> void:
-	if not _setup_done:
+	if not _setup_done or not is_host():
 		return
-	var my_id := _local_peer_id()
-	# Whoever holds an item simulates it locally (same drive_toward + collisions as offline).
 	for item_id in _holders.keys():
-		if int(_holders[item_id]) != my_id:
-			continue
 		var item := get_item(item_id)
 		if item == null or not item.is_held:
 			continue
 		if not _drag_targets.has(item_id):
 			continue
 		item.drive_toward(_drag_targets[item_id], HOLD_FOLLOW_SPEED, delta)
-	if not is_net_active():
-		return
-	if multiplayer.is_server():
-		# Host-held: every tick.
-		if _peer_holds_any(my_id):
-			_broadcast_item_poses(true, false, my_id)
-		# While anything is held, stream free-item poses every tick so kinematic
-		# pushes from a remote holder's puppet show up immediately.
-		if not _holders.is_empty():
-			_broadcast_item_poses(false, true, 0)
-		else:
-			_pose_sync_timer += delta
-			if _pose_sync_timer >= POSE_SYNC_INTERVAL_SEC:
-				_pose_sync_timer = 0.0
-				_broadcast_item_poses(false, true, 0)
-	elif _peer_holds_any(my_id):
-		# Client holder streams their simulated poses to host + other peers.
-		_broadcast_item_poses(true, false, my_id)
+	if is_net_active() and multiplayer.is_server():
+		_pose_sync_timer += delta
+		var interval := POSE_SYNC_HELD_INTERVAL_SEC if not _holders.is_empty() else POSE_SYNC_INTERVAL_SEC
+		if _pose_sync_timer >= interval:
+			_pose_sync_timer = 0.0
+			_broadcast_item_poses()
 
-func _local_peer_id() -> int:
-	if is_net_active():
-		return multiplayer.get_unique_id()
-	return 1
-
-func _peer_holds_any(peer_id: int) -> bool:
-	for holder in _holders.values():
-		if int(holder) == peer_id:
-			return true
-	return false
-
-func _broadcast_item_poses(held_only: bool = false, free_only: bool = false, holder_filter: int = 0) -> void:
+func _broadcast_item_poses() -> void:
 	if _items.is_empty():
 		return
 	var poses: Array = []
 	for item_id in _items.keys():
-		var is_held_item := _holders.has(item_id)
-		if held_only and not is_held_item:
-			continue
-		if free_only and is_held_item:
-			continue
-		if holder_filter != 0 and int(_holders.get(item_id, 0)) != holder_filter:
-			continue
 		var item := get_item(item_id)
 		if item == null:
 			continue
 		var pos := item.global_position
 		var rot := item.rotation
 		var vel := item.linear_velocity
+		var holder := int(_holders.get(item_id, 0))
+		# Don't send push-into-obstacle velocities while held — clients would tunnel.
+		if holder != 0:
+			vel = Vector3.ZERO
 		poses.append([
 			item_id,
 			pos.x, pos.y, pos.z,
 			rot.x, rot.y, rot.z,
-			int(_holders.get(item_id, 0)),
+			holder,
 			vel.x, vel.y, vel.z,
 		])
 	if poses.is_empty():
@@ -235,26 +205,18 @@ func _broadcast_item_poses(held_only: bool = false, free_only: bool = false, hol
 
 @rpc("any_peer", "reliable")
 func _rpc_sync_item_poses(poses: Array) -> void:
-	var sender := multiplayer.get_remote_sender_id()
-	if sender == 0:
+	if multiplayer.is_server():
 		return
-	var my_id := multiplayer.get_unique_id()
-	if sender == my_id:
+	if multiplayer.get_remote_sender_id() != 1:
 		return
 	for entry in poses:
 		if typeof(entry) != TYPE_ARRAY or entry.size() < POSE_STRIDE:
 			continue
 		var item_id := int(entry[0])
-		var holder := int(entry[7])
-		# Held: only the holder may publish. Free: only the host.
-		if holder != 0:
-			if sender != holder or int(_holders.get(item_id, -1)) != holder:
-				continue
-		elif sender != 1:
-			continue
 		var item := get_item(item_id)
 		if item == null:
 			continue
+		var holder := int(entry[7])
 		item.apply_network_pose(
 			Vector3(float(entry[1]), float(entry[2]), float(entry[3])),
 			Vector3(float(entry[4]), float(entry[5]), float(entry[6])),
@@ -284,24 +246,35 @@ func _server_try_grab(item_id: int, peer_id: int) -> void:
 	var item := get_item(item_id)
 	if item == null or item.is_held:
 		return
+	# No hard range gate — client visuals can lag host physics; host still owns the item.
 	_holders[item_id] = peer_id
 	_drag_targets[item_id] = item.global_position
 	if is_net_active():
 		_rpc_apply_held.rpc(item_id, peer_id, true, Vector3.ZERO)
-		if peer_id == multiplayer.get_unique_id():
-			_broadcast_item_poses(true, false, peer_id)
+		_broadcast_item_poses()
 	else:
 		_apply_held(item_id, peer_id, true, Vector3.ZERO)
 
 func update_drag_target(item_id: int, target: Vector3) -> void:
-	## Drag targets stay on the holding peer — they simulate locally.
 	if not is_net_active():
 		_drag_targets[item_id] = target
 		var item := get_item(item_id)
 		if item and item.is_held:
 			item.drive_toward(target, HOLD_FOLLOW_SPEED, get_physics_process_delta_time())
 		return
-	if int(_holders.get(item_id, -1)) != multiplayer.get_unique_id():
+	if multiplayer.is_server():
+		if _holders.get(item_id, -1) != multiplayer.get_unique_id():
+			return
+		_drag_targets[item_id] = target
+	else:
+		_rpc_update_drag.rpc_id(1, item_id, target)
+
+@rpc("any_peer", "reliable")
+func _rpc_update_drag(item_id: int, target: Vector3) -> void:
+	if not multiplayer.is_server():
+		return
+	var peer := multiplayer.get_remote_sender_id()
+	if _holders.get(item_id, -1) != peer:
 		return
 	_drag_targets[item_id] = target
 
@@ -327,7 +300,7 @@ func _server_release(item_id: int, peer_id: int, velocity: Vector3) -> void:
 	_drag_targets.erase(item_id)
 	if is_net_active():
 		_rpc_apply_held.rpc(item_id, peer_id, false, velocity)
-		_broadcast_item_poses(false, true, 0)
+		_broadcast_item_poses()
 	else:
 		_apply_held(item_id, peer_id, false, velocity)
 
@@ -340,16 +313,6 @@ func _rpc_apply_held(item_id: int, peer_id: int, held: bool, release_velocity: V
 	_apply_held(item_id, peer_id, held, release_velocity)
 
 func _apply_held(item_id: int, peer_id: int, held: bool, release_velocity: Vector3) -> void:
-	# Keep holder map in sync on every peer (needed for local sim + pose validation).
-	if held:
-		_holders[item_id] = peer_id
-		if not _drag_targets.has(item_id):
-			var existing := get_item(item_id)
-			if existing:
-				_drag_targets[item_id] = existing.global_position
-	else:
-		_holders.erase(item_id)
-		_drag_targets.erase(item_id)
 	var item := get_item(item_id)
 	if item == null:
 		return
@@ -397,7 +360,7 @@ func _server_pickup(item_id: int, peer_id: int) -> void:
 			inventory_granted.emit(scene_path, icon_path)
 		else:
 			_rpc_grant_inventory.rpc_id(peer_id, scene_path, icon_path)
-		_broadcast_item_poses(false, true, 0)
+		_broadcast_item_poses()
 	else:
 		_despawn_item(item_id)
 		inventory_granted.emit(scene_path, icon_path)
@@ -429,8 +392,7 @@ func _server_drop(scene_path: String, position: Vector3, grab_after: bool, peer_
 		return
 	if grab_after:
 		_server_try_grab(item_id, peer_id)
-	elif is_net_active() and multiplayer.is_server():
-		_broadcast_item_poses(false, true, 0)
+	_broadcast_item_poses()
 
 # --- Attack / trees ----------------------------------------------------------
 

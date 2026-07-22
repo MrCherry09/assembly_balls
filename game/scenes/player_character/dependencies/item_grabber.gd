@@ -299,10 +299,10 @@ func _drag_on_depth_plane(delta: float) -> void:
 	var target := origin + dir * _grab_depth + _grab_offset
 	if _uses_world_net():
 		WorldNet.update_drag_target(held_item.item_id, target)
-		# Holder simulates locally; sample real velocity for throws.
-		var sample := held_item.linear_velocity
+		# Visuals come from host poses on all peers (including this client).
+		var desired_vel := (target - held_item.global_position) * hold_follow_speed
 		var blend := clampf(18.0 * delta, 0.0, 1.0)
-		_throw_velocity = _throw_velocity.lerp(sample, blend)
+		_throw_velocity = _throw_velocity.lerp(desired_vel, blend)
 		return
 	held_item.drive_toward(target, hold_follow_speed, delta)
 	var sample := held_item.linear_velocity

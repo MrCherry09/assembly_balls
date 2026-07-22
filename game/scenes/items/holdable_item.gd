@@ -19,13 +19,15 @@ class_name HoldableItem
 @export var item_id: int = 0
 ## Cached packed-scene path for inventory pickup/drop (scene_file_path can be empty on some instances).
 @export var spawn_scene_path: String = ""
+## Client visual follow speed toward host pose (higher = snappier, more jitter risk).
+@export var net_visual_follow: float = 18.0
+## Hard-snap if the puppet is this far from the extrapolated host pose.
+@export var net_snap_distance: float = 2.5
+## Max seconds of velocity extrapolation between pose packets.
+@export var net_extrapolate_max_sec: float = 0.12
 
 const LAYER_WORLD := 1
 const LAYER_HOLDABLE := 4
-## How long we spread motion between two remote snapshots (smooths packet jitter).
-const NET_INTERP_WINDOW_SEC := 0.05
-## Beyond this, snap instead of interpolating (teleports / corrections).
-const NET_SNAP_DIST := 3.0
 
 var is_held: bool = false
 var holder_peer_id: int = 0
@@ -33,16 +35,12 @@ var _holder: Node = null
 var _default_gravity_scale: float = 2.4
 var _network_ready: bool = false
 
-# Remote puppet: interpolate between authoritative snapshots from the simulating peer.
-var _net_has_pose: bool = false
-var _net_from_pos: Vector3 = Vector3.ZERO
-var _net_from_rot: Vector3 = Vector3.ZERO
-var _net_to_pos: Vector3 = Vector3.ZERO
-var _net_to_rot: Vector3 = Vector3.ZERO
-var _net_to_vel: Vector3 = Vector3.ZERO
-var _net_interp_t: float = 0.0
-var _net_interp_dur: float = NET_INTERP_WINDOW_SEC
-var _net_last_pose_msec: int = 0
+# Client-only: ease toward host-authoritative poses (same view for holder and observers).
+var _net_pos: Vector3 = Vector3.ZERO
+var _net_rot: Vector3 = Vector3.ZERO
+var _net_vel: Vector3 = Vector3.ZERO
+var _net_age_sec: float = 0.0
+var _has_net_pose: bool = false
 
 func _ready() -> void:
 	if mesh_instance == null:
@@ -59,7 +57,6 @@ func _ready() -> void:
 	can_sleep = false
 	contact_monitor = true
 	max_contacts_reported = 8
-	set_physics_process(true)
 
 func get_spawn_scene_path() -> String:
 	if spawn_scene_path != "":
@@ -74,49 +71,34 @@ func setup_network() -> void:
 	if not multiplayer.has_multiplayer_peer():
 		return
 	set_multiplayer_authority(1)
-	if is_local_sim_authority():
-		freeze = false
-	else:
-		_set_as_puppet(Vector3.ZERO)
+	# Clients are visual puppets driven by WorldNet pose RPCs (not MultiplayerSynchronizer —
+	# runtime-created synchronizers are unreliable in Godot 4).
+	if not multiplayer.is_server():
+		freeze = true
+		linear_velocity = Vector3.ZERO
+		angular_velocity = Vector3.ZERO
+		_net_pos = global_position
+		_net_rot = rotation
+		_net_vel = Vector3.ZERO
+		_net_age_sec = 0.0
+		_has_net_pose = true
 	_network_ready = true
 
-func is_local_sim_authority() -> bool:
-	## Free items: host. Held items: the holding peer. Offline: always local.
-	if not multiplayer.has_multiplayer_peer():
-		return true
-	if is_held:
-		return holder_peer_id == multiplayer.get_unique_id()
-	return multiplayer.is_server()
-
-func _physics_process(delta: float) -> void:
-	if is_local_sim_authority():
+func _process(delta: float) -> void:
+	if not multiplayer.has_multiplayer_peer() or multiplayer.is_server():
 		return
-	if not _net_has_pose:
+	if not _network_ready and not _has_net_pose:
 		return
-	_net_interp_t += delta
-	var alpha := 1.0
-	if _net_interp_dur > 0.0001:
-		alpha = clampf(_net_interp_t / _net_interp_dur, 0.0, 1.0)
-	var pos := _net_from_pos.lerp(_net_to_pos, alpha)
-	var rot := Vector3(
-		lerp_angle(_net_from_rot.x, _net_to_rot.x, alpha),
-		lerp_angle(_net_from_rot.y, _net_to_rot.y, alpha),
-		lerp_angle(_net_from_rot.z, _net_to_rot.z, alpha)
-	)
-	var vel := _net_to_vel
-	if alpha >= 1.0:
-		var over := _net_interp_t - _net_interp_dur
-		pos = _net_to_pos + _net_to_vel * over
-	else:
-		# Approximate segment velocity so kinematic contacts still resolve.
-		vel = (_net_to_pos - _net_from_pos) / maxf(_net_interp_dur, 0.001)
-	_set_as_puppet(vel)
-	_teleport_visual(pos, rot, vel)
+	if not _has_net_pose:
+		return
+	_net_age_sec += delta
+	_update_network_visual(delta)
 
 func apply_network_pose(pos: Vector3, rot: Vector3, held: bool, peer_id: int, vel: Vector3 = Vector3.ZERO) -> void:
-	## Puppet update from the peer that is currently simulating this item.
-	if is_local_sim_authority():
+	## Host is truth for everyone (including the local holder). Clients ease toward poses.
+	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
 		return
+	freeze = true
 	var was_held := is_held
 	is_held = held
 	holder_peer_id = peer_id if held else 0
@@ -124,69 +106,54 @@ func apply_network_pose(pos: Vector3, rot: Vector3, held: bool, peer_id: int, ve
 	if mesh_instance and outline_material and was_held != held:
 		mesh_instance.material_overlay = outline_material if held else null
 
-	# Host snaps to remote holder as a kinematic body so free items get pushed.
-	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
-		var push_vel := vel
-		if push_vel.length_squared() < 0.0001:
-			var dt := maxf(get_physics_process_delta_time(), 0.001)
-			push_vel = (pos - global_position) / dt
-		_set_as_puppet(push_vel)
-		_teleport_visual(pos, rot, push_vel)
-		_net_has_pose = false
+	_net_pos = pos
+	_net_rot = rot
+	# Held bodies often report velocity into walls/props while physically blocked —
+	# never extrapolate that or the puppet tunnels in/out of geometry.
+	_net_vel = Vector3.ZERO if held else vel
+	_net_age_sec = 0.0
+	if not _has_net_pose or global_position.distance_to(pos) > net_snap_distance:
+		_teleport_visual(pos, rot)
+	_has_net_pose = true
+
+func _update_network_visual(delta: float) -> void:
+	var target_pos := _net_pos
+	var target_rot := _net_rot
+
+	# Only extrapolate free (unheld) motion. Held items stay glued to the last host pose.
+	if not is_held and _net_vel.length() >= 0.15:
+		var age := minf(_net_age_sec, net_extrapolate_max_sec)
+		target_pos = _net_pos + _net_vel * age
+
+	if global_position.distance_to(target_pos) > net_snap_distance:
+		_teleport_visual(target_pos, target_rot)
 		return
 
-	var dist := global_position.distance_to(pos)
-	if not _net_has_pose or dist > NET_SNAP_DIST or (not was_held and held) or (was_held and not held):
-		_set_as_puppet(vel)
-		_teleport_visual(pos, rot, vel)
-		_net_from_pos = pos
-		_net_from_rot = rot
-		_net_to_pos = pos
-		_net_to_rot = rot
-		_net_to_vel = vel
-		_net_interp_t = _net_interp_dur
-		_net_last_pose_msec = Time.get_ticks_msec()
-		_net_has_pose = true
-		return
+	# Slightly snappier while held so wall contact doesn't "swim" between packets.
+	var follow := net_visual_follow * 1.35 if is_held else net_visual_follow
+	var t := 1.0 - exp(-follow * delta)
+	_teleport_visual(
+		global_position.lerp(target_pos, t),
+		_lerp_euler(rotation, target_rot, t)
+	)
 
-	var now := Time.get_ticks_msec()
-	var dt_sec := NET_INTERP_WINDOW_SEC
-	if _net_last_pose_msec > 0:
-		dt_sec = clampf(float(now - _net_last_pose_msec) / 1000.0, 1.0 / 60.0, 0.12)
-	_net_last_pose_msec = now
-	_net_from_pos = global_position
-	_net_from_rot = rotation
-	_net_to_pos = pos
-	_net_to_rot = rot
-	_net_to_vel = vel
-	_net_interp_t = 0.0
-	_net_interp_dur = dt_sec
-	_net_has_pose = true
+func _lerp_euler(from: Vector3, to: Vector3, weight: float) -> Vector3:
+	return Vector3(
+		lerp_angle(from.x, to.x, weight),
+		lerp_angle(from.y, to.y, weight),
+		lerp_angle(from.z, to.z, weight)
+	)
 
-func _set_as_puppet(vel: Vector3) -> void:
-	## Kinematic freeze still pushes dynamic rigid bodies when moved via code.
-	freeze = true
-	freeze_mode = FREEZE_MODE_KINEMATIC
-	linear_velocity = vel
-	angular_velocity = Vector3.ZERO
-
-func _teleport_visual(pos: Vector3, rot: Vector3, vel: Vector3 = Vector3.ZERO) -> void:
-	_set_as_puppet(vel)
+func _teleport_visual(pos: Vector3, rot: Vector3) -> void:
 	var xf := Transform3D(Basis.from_euler(rot), pos)
 	PhysicsServer3D.body_set_state(get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM, xf)
 	global_transform = xf
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
 
 func _apply_world_collision() -> void:
 	collision_layer = LAYER_HOLDABLE
 	collision_mask = LAYER_WORLD | LAYER_HOLDABLE
-
-func _apply_holder_collision_mask(held: bool, simulate: bool) -> void:
-	## Client holders skip local holdable-holdable contacts — free items are frozen
-	## puppets there. The host kinematic copy of the held item pushes them instead.
-	if held and simulate and multiplayer.has_multiplayer_peer() and not multiplayer.is_server():
-		collision_mask = LAYER_WORLD
-	else:
-		collision_mask = LAYER_WORLD | LAYER_HOLDABLE
 
 func _apply_heavy_feel() -> void:
 	linear_damp = 1.6
@@ -208,33 +175,41 @@ func set_held_network(peer_id: int, held: bool, release_velocity: Vector3 = Vect
 	is_held = held
 	holder_peer_id = peer_id if held else 0
 	_holder = null
-	_net_has_pose = false
 	_apply_held_physics(held, release_velocity)
 
 func _apply_held_physics(held: bool, release_velocity: Vector3) -> void:
 	_apply_world_collision()
+	var on_host := not multiplayer.has_multiplayer_peer() or multiplayer.is_server()
 	if held:
 		linear_velocity = Vector3.ZERO
 		angular_velocity = Vector3.ZERO
 		gravity_scale = 0.0
+		if on_host:
+			freeze = false
+		else:
+			freeze = true
 	else:
 		gravity_scale = _default_gravity_scale
-	var simulate := is_local_sim_authority()
-	_apply_holder_collision_mask(held, simulate)
-	if simulate:
-		freeze = false
-		if not held:
+		if on_host:
+			freeze = false
 			linear_velocity = release_velocity
 			angular_velocity = Vector3.ZERO
-	else:
-		_set_as_puppet(Vector3.ZERO)
+		else:
+			freeze = true
+			linear_velocity = Vector3.ZERO
+			angular_velocity = Vector3.ZERO
+			_net_pos = global_position
+			_net_rot = rotation
+			_net_vel = Vector3.ZERO
+			_net_age_sec = 0.0
+			_has_net_pose = true
 	if mesh_instance and outline_material:
 		mesh_instance.material_overlay = outline_material if held else null
 
 func drive_toward(target: Vector3, follow_speed: float, _delta: float) -> void:
 	if not is_held:
 		return
-	if multiplayer.has_multiplayer_peer() and holder_peer_id != multiplayer.get_unique_id():
+	if multiplayer.has_multiplayer_peer() and not multiplayer.is_server():
 		return
 	freeze = false
 	var to_target := target - global_position

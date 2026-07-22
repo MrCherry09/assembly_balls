@@ -11,7 +11,7 @@ const PITCH_LIMIT_DEG := 89.0
 @export_group("Third person")
 @export_range(1.0, 12.0, 0.1) var camera_distance: float = 3.5
 @export_range(-1.0, 2.0, 0.05) var camera_height: float = 0.35
-@export_range(-2.0, 2.0, 0.05) var shoulder_offset: float = 1.05
+@export_range(-2.0, 2.0, 0.05) var shoulder_offset: float = 1.0
 @export_range(0.05, 1.0, 0.01) var collision_margin: float = 0.2
 ## How quickly the camera eases in/out when a wall shortens the arm.
 @export_range(1.0, 40.0, 0.1) var collision_smooth_speed: float = 16.0
@@ -20,20 +20,25 @@ const PITCH_LIMIT_DEG := 89.0
 @export var link_to: Node3D
 
 @export_group("Aim")
-## Local X offset while aiming (hold aim key).
-@export var aim_shoulder_offset: float = 0.8
-## Local Z / orbit distance while aiming (hold aim key).
-@export var aim_camera_distance: float = 1.5
-@export_range(1.0, 30.0, 0.1) var aim_blend_speed: float = 12.0
+## Local Z / orbit distance while aiming.
+@export var aim_camera_distance: float = 2.15
+## Slightly higher pivot while aiming (reads as leaning into the shot).
+@export var aim_camera_height: float = 0.42
+@export_range(1.0, 30.0, 0.1) var aim_blend_speed: float = 14.0
+## Multiplier on look sensitivity while aiming.
+@export_range(0.2, 1.0, 0.01) var aim_look_sensitivity_scale: float = 0.72
 @export var aim_action: StringName = &"play_char_aim_action"
 var is_aiming: bool = false
 var _default_shoulder_offset: float = 0.0
 var _default_camera_distance: float = 0.0
+var _default_camera_height: float = 0.0
 var _current_shoulder_offset: float = 0.0
 var _current_camera_distance: float = 0.0
+var _current_camera_height: float = 0.0
 var _stored_shoulder_offset: float = 0.0
 var _stored_camera_distance: float = 0.0
 var _was_aiming: bool = false
+var _fov_tween: Tween
 ## Smoothed orbit arm length (avoids hard snaps when colliding with walls).
 var _arm_length: float = 0.0
 ## Local Y of CameraHolder on the player (baked out when top_level).
@@ -94,8 +99,10 @@ func _ready() -> void:
 	_look_pitch = camera.rotation.x
 	_default_shoulder_offset = shoulder_offset
 	_default_camera_distance = camera_distance
+	_default_camera_height = camera_height
 	_current_shoulder_offset = shoulder_offset
 	_current_camera_distance = camera_distance
+	_current_camera_height = camera_height
 	_stored_shoulder_offset = shoulder_offset
 	_stored_camera_distance = camera_distance
 	_arm_length = camera_distance
@@ -189,6 +196,8 @@ func _handle_mouse_motion(event: InputEventMouseMotion) -> void:
 	# Free-look while RMB orbiting or while aiming.
 	if not _orbiting and not is_aiming: return
 	var sensitivity := look_sensitivity / 10.0
+	if is_aiming:
+		sensitivity *= aim_look_sensitivity_scale
 	_look_yaw -= event.relative.x * sensitivity
 	_look_pitch -= event.relative.y * sensitivity
 	_apply_look_rotation()
@@ -229,8 +238,9 @@ func _process(delta: float) -> void:
 	_update_camera_position(delta)
 
 func _store_hip_fire_camera_state() -> void:
-	_stored_shoulder_offset = _current_shoulder_offset
-	_stored_camera_distance = _current_camera_distance
+	## Hip-fire targets stay on configured defaults so spam-aim cannot drift the rest pose.
+	_stored_shoulder_offset = _default_shoulder_offset
+	_stored_camera_distance = _default_camera_distance
 
 func _update_aim(delta: float) -> void:
 	if multiplayer and not is_multiplayer_authority():
@@ -246,15 +256,19 @@ func _update_aim(delta: float) -> void:
 	_sync_mouse_mode()
 
 	var t := clampf(aim_blend_speed * delta, 0.0, 1.0)
-	var target_shoulder := aim_shoulder_offset if is_aiming else _stored_shoulder_offset
-	var target_distance := aim_camera_distance if is_aiming else _stored_camera_distance
-	_current_shoulder_offset = lerpf(_current_shoulder_offset, target_shoulder, t)
+	# Never change shoulder while aiming — moving X slides the whole view sideways.
+	_current_shoulder_offset = _default_shoulder_offset
+	var target_distance := aim_camera_distance if is_aiming else _default_camera_distance
+	var target_height := aim_camera_height if is_aiming else _default_camera_height
 	_current_camera_distance = lerpf(_current_camera_distance, target_distance, t)
+	_current_camera_height = lerpf(_current_camera_height, target_height, t)
+	_stored_shoulder_offset = _default_shoulder_offset
+	_stored_camera_distance = _default_camera_distance
 
 func _orbit_local(arm: float, pitch: float) -> Vector3:
 	return Vector3(
 		_current_shoulder_offset,
-		-sin(pitch) * arm + camera_height,
+		-sin(pitch) * arm + _current_camera_height,
 		cos(pitch) * arm
 	)
 
@@ -297,12 +311,19 @@ func zoom() -> void:
 		if !zoom_on: zoom_has_occured = false
 		change_fov()
 
+func _kill_fov_tween() -> void:
+	if _fov_tween and _fov_tween.is_valid():
+		_fov_tween.kill()
+	_fov_tween = null
+
 func change_fov() -> void:
 	if zoom_has_occured:
 		return
 
 	state = play_char.state_machine.curr_state_name
-	var fov_change_tween: Tween = get_tree().create_tween()
+	_kill_fov_tween()
+	_fov_tween = get_tree().create_tween()
+	var fov_change_tween := _fov_tween
 
 	if !zoom_on and !zoom_has_occured:
 		if state != null and state != "Jump" and state != "Inair" and state != "Wallrun":
