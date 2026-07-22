@@ -22,19 +22,25 @@ func _setup_multiplayer_spawner() -> void:
 func _ready() -> void:
 	_update_lobby_info_button()
 	_setup_multiplayer_spawner()
-	
+	_setup_world_net.call_deferred()
+
 	Online.server_disconnected.connect(_handle_failed_connection)
 	Online.connection_failed.connect(_handle_failed_connection)
-	
+
 	main_menu.host_online_requested.connect(_on_host_online_requested)
 	main_menu.host_local_requested.connect(_on_host_local_requested)
-	
+
 	main_menu.join_requested.connect(_on_join_requested)
 	main_menu.quit_requested.connect(_on_quit_requested)
 	multiplayer.peer_disconnected.connect(_remove_peer)
 	Online.player_connected.connect(_on_player_connected)
 	Online.player_disconnected.connect(_on_player_disconnected)
 	toggle_ui(true)
+
+func _setup_world_net() -> void:
+	var items := get_node_or_null("World3D/Items") as Node3D
+	if items:
+		WorldNet.setup(items)
 
 func toggle_ui(should_show_menu: bool, is_loading: bool = false) -> void:
 	if should_show_menu:
@@ -74,6 +80,7 @@ func _on_host_local_requested() -> void:
 			steam_friends_list.hide()
 			toggle_ui(false)
 			_update_lobby_info_button.call_deferred()
+			WorldNet.refresh_network()
 		_:
 			steam_friends_list.show()
 			toggle_ui(true)
@@ -86,6 +93,7 @@ func _on_host_online_requested() -> void:
 		Online.ErrorCodes.SUCCESS:
 			_update_lobby_info_button.call_deferred()
 			toggle_ui(false)
+			WorldNet.refresh_network()
 		_:
 			toggle_ui(true)
 
@@ -99,6 +107,7 @@ func _on_join_requested(address: String) -> void:
 	match error:
 		Online.ErrorCodes.SUCCESS:
 			toggle_ui(false)
+			WorldNet.refresh_network()
 		_:
 			toggle_ui(true)
 

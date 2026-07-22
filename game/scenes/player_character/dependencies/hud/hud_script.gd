@@ -205,32 +205,70 @@ func _instantiate_inventory_item(slot_index: int) -> HoldableItem:
 	if world_root == null:
 		item.queue_free()
 		return null
-	world_root.add_child(item)
+	var items := world_root.get_node_or_null("World3D/Items")
+	if items:
+		items.add_child(item)
+	else:
+		world_root.add_child(item)
 	return item
+
+func _is_local_hud() -> bool:
+	if play_char == null:
+		return is_multiplayer_authority()
+	if multiplayer.has_multiplayer_peer():
+		return play_char.is_multiplayer_authority()
+	return true
 
 func try_add_holdable_item(item: HoldableItem) -> bool:
 	if item == null:
 		return false
-	if multiplayer.has_multiplayer_peer() and not is_multiplayer_authority():
+	if not _is_local_hud():
 		return false
 
 	var slot_index := _find_first_free_inventory_slot()
 	if slot_index == -1:
 		return false
 
-	var scene_path := item.scene_file_path
+	var scene_path := item.get_spawn_scene_path() if item.has_method("get_spawn_scene_path") else item.scene_file_path
 	if scene_path == "":
 		return false
 	var icon_texture := item.inventory_icon if item.inventory_icon else DEFAULT_INVENTORY_ICON
 	_set_inventory_slot_content(slot_index, scene_path, icon_texture)
 	return true
 
+func add_inventory_item_from_net(scene_path: String, icon_path: String) -> bool:
+	if not _is_local_hud():
+		return false
+	if scene_path == "":
+		return false
+	var slot_index := _find_first_free_inventory_slot()
+	if slot_index == -1:
+		return false
+	var icon_texture: Texture2D = DEFAULT_INVENTORY_ICON
+	if icon_path != "":
+		var loaded := load(icon_path)
+		if loaded is Texture2D:
+			icon_texture = loaded
+	_set_inventory_slot_content(slot_index, scene_path, icon_texture)
+	return true
+
 func _try_begin_inventory_slot_drag(slot_index: int) -> void:
+	if slot_index < 0 or slot_index >= _inventory_slot_scene_paths.size():
+		return
+	var scene_path := _inventory_slot_scene_paths[slot_index]
+	if scene_path == "":
+		return
+	var grabber := _get_item_grabber()
+	if grabber == null:
+		return
+	if WorldNet and WorldNet.is_net_active():
+		grabber.begin_net_inventory_drag(scene_path)
+		_clear_inventory_slot(slot_index)
+		return
 	var item := _instantiate_inventory_item(slot_index)
 	if item == null:
 		return
-	var grabber := _get_item_grabber()
-	if grabber == null or not grabber.begin_inventory_drag(item):
+	if not grabber.begin_inventory_drag(item):
 		item.queue_free()
 		return
 	_clear_inventory_slot(slot_index)
@@ -290,10 +328,12 @@ func _setup_look_hint_label() -> void:
 	add_child(look_hint_label)
 
 func _process(_delta: float) -> void:
-	if multiplayer.has_multiplayer_peer() and not is_multiplayer_authority():
+	if multiplayer.has_multiplayer_peer() and not _is_local_hud():
 		if visible:
 			hide()
 		return
+	if not visible:
+		show()
 	display_current_FPS()
 	display_properties()
 	if look_hint_label and not look_hint_label.visible:
@@ -326,7 +366,7 @@ func round_to_3_decimals(value: float) -> float:
 var _ui_cicle_index := 0
 
 func _cicle_ui(new_cicle_index: int = _ui_cicle_index + 1) -> void:
-	if not is_multiplayer_authority():
+	if not _is_local_hud():
 		return
 	var ui_components: Array[Node] = [player_info, frames_info, crosshair]
 	var components_states_matrix: Array[Array] = [
@@ -339,10 +379,10 @@ func _cicle_ui(new_cicle_index: int = _ui_cicle_index + 1) -> void:
 	for i in ui_components.size():
 		ui_components[i].visible = components_states_matrix[_ui_cicle_index][i]
 	if look_hint_label:
-		look_hint_label.visible = is_multiplayer_authority()
+		look_hint_label.visible = _is_local_hud()
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not is_multiplayer_authority():
+	if not _is_local_hud():
 		return
 	if event.is_action_pressed("cicle_player_hud"):
 		_cicle_ui()
