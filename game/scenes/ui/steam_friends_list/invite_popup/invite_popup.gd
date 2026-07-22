@@ -26,13 +26,9 @@ func _on_lobby_invite_received(lobby_id: int, sender_id: int) -> void:
 	_update_request_info()
 
 func _accept_request() -> void:
-	var lobby_id := request_lobby_id
+	if Online.steam_lobby_id: Online.leave_lobby()
+	Online.join_steam_lobby(request_lobby_id)
 	_close_request()
-	if lobby_id == 0:
-		return
-	if Online.steam_lobby_id:
-		Online.leave_lobby()
-	await Online.join_steam_lobby(lobby_id)
 
 func _close_request() -> void:
 	request_lobby_id = 0
