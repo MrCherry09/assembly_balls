@@ -180,23 +180,41 @@ func host_steam_lobby() -> ErrorCodes:
 func _on_steam_join_requested(lobby_id: int, _steam_id: int) -> void: join_steam_lobby(lobby_id)
 
 func join_steam_lobby(lobby_id: int = 0) -> ErrorCodes:
-	if is_busy: return ErrorCodes.CURRENTLY_BUSY
+	if is_busy:
+		return ErrorCodes.CURRENTLY_BUSY
+	if lobby_id == 0:
+		return ErrorCodes.FAILED
 	is_joining = true
-	if lobby_id != steam_lobby_id and steam_lobby_id != 0: leave_lobby()
-	is_host = false
-	steam_lobby_id = lobby_id
 	is_busy = true
+	is_host = false
+	if steam_lobby_id != 0 and steam_lobby_id != lobby_id:
+		# leave_lobby() clears flags — restore join state afterward.
+		leave_lobby()
+		is_joining = true
+		is_busy = true
+		is_host = false
+	steam_lobby_id = lobby_id
 	Steam.joinLobby(lobby_id)
 	var error: ErrorCodes = await lobby_join_response
 	is_joining = false
-	if error == ErrorCodes.SUCCESS: joined_lobby.emit()
 	is_busy = false
+	if error == ErrorCodes.SUCCESS:
+		joined_lobby.emit()
+	elif steam_lobby_id == lobby_id and error != ErrorCodes.SUCCESS:
+		steam_lobby_id = 0
 	return error
 
 func _on_steam_lobby_join_response(lobby_id: int, _permissions: int, _locked: bool, response: int) -> void:
 	var lobby_owner_id: int = Steam.getLobbyOwner(lobby_id)
-	if lobby_owner_id == Steam.getSteamID(): lobby_join_response.emit(ErrorCodes.JOIN_FAILED_SAME_OWNER_ID); return
-	if response != Steam.RESULT_OK: lobby_join_response.emit(ErrorCodes.STEAM_CONNECTION_ERROR); return
+	# Host createLobby also fires lobby_joined — ignore that (do not emit a join error).
+	if lobby_owner_id == Steam.getSteamID():
+		return
+	if not is_joining:
+		return
+	# lobby_joined uses ChatRoomEnterResponse; success is 1 (same numeric value as RESULT_OK).
+	if response != 1:
+		lobby_join_response.emit(ErrorCodes.STEAM_CONNECTION_ERROR)
+		return
 	var new_steam_peer := _create_steam_peer()
 	var error := new_steam_peer.create_client(lobby_owner_id, 0)
 	match error:
@@ -207,7 +225,7 @@ func _on_steam_lobby_join_response(lobby_id: int, _permissions: int, _locked: bo
 			lobby_join_response.emit(ErrorCodes.SUCCESS)
 		_:
 			new_steam_peer.close()
-			Steam.leaveLobby(steam_lobby_id)
+			Steam.leaveLobby(lobby_id)
 			lobby_join_response.emit(ErrorCodes.FAILED)
 
 func _create_steam_peer() -> SteamMultiplayerPeer:

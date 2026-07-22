@@ -98,12 +98,20 @@ func _on_host_online_requested() -> void:
 			toggle_ui(true)
 
 func _on_join_requested(address: String) -> void:
-	if not address: address = Online.LOCAL_SERVER_ADDRESS
+	if not address:
+		address = Online.LOCAL_SERVER_ADDRESS
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	toggle_ui(true, true)
 	var error: Online.ErrorCodes
-	if address == Online.LOCAL_SERVER_ADDRESS: error = await Online.join_local_lobby()
-	else: error = await Online.join_steam_lobby(address as int)
+	if address == Online.LOCAL_SERVER_ADDRESS:
+		error = await Online.join_local_lobby()
+	else:
+		# Parse the pasted lobby id. `as int` does not convert numeric strings.
+		var lobby_id := address.to_int()
+		if lobby_id == 0:
+			error = Online.ErrorCodes.FAILED
+		else:
+			error = await Online.join_steam_lobby(lobby_id)
 	match error:
 		Online.ErrorCodes.SUCCESS:
 			toggle_ui(false)
