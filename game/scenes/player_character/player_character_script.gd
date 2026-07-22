@@ -246,57 +246,35 @@ func attack() -> void:
 	if current_time - last_attack_time < attack_cooldown_ms:
 		return
 	last_attack_time = current_time
-
-	_play_attack_vfx()
-	if multiplayer.has_multiplayer_peer():
-		WorldNet.request_attack(
-			attack_damage,
-			attack_cooldown_ms,
-			attack_hit_area,
-			body_yaw,
-			base_hitbox_height
-		)
-	else:
-		_local_attack_query()
-
-func _play_attack_vfx() -> void:
-	_spawn_attack_vfx_mesh(body_yaw, attack_hit_area, base_hitbox_height)
-
-func play_attack_vfx_network(yaw: float, hit_area: Vector3, hitbox_height: float) -> void:
-	_spawn_attack_vfx_mesh(yaw, hit_area, hitbox_height)
-
-func _spawn_attack_vfx_mesh(yaw: float, hit_area: Vector3, hitbox_height: float) -> void:
+	
 	var mesh_instance := MeshInstance3D.new()
 	var mesh := BoxMesh.new()
-	mesh.size = hit_area
+	mesh.size = attack_hit_area
 	var material := StandardMaterial3D.new()
 	material.albedo_color = Color(1.0, 0.0, 0.0, 0.5)
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mesh.material = material
 	mesh_instance.mesh = mesh
-
+	
 	add_child(mesh_instance)
-
-	var forward := -Vector3(sin(yaw), 0, cos(yaw))
-	var local_pos := Vector3(0, hitbox_height / 2.0, 0) + forward * 1.0
+	
+	var forward := -Vector3(sin(body_yaw), 0, cos(body_yaw))
+	var local_pos := Vector3(0, base_hitbox_height / 2.0, 0) + forward * 1.0
 	mesh_instance.position = local_pos
-	mesh_instance.rotation.y = yaw
-
+	mesh_instance.rotation.y = body_yaw
+	
 	var tween := create_tween()
 	tween.tween_property(material, "albedo_color:a", 0.0, 0.2)
 	tween.tween_callback(mesh_instance.queue_free)
-
-func _local_attack_query() -> void:
-	var forward := -Vector3(sin(body_yaw), 0, cos(body_yaw))
-	var local_pos := Vector3(0, base_hitbox_height / 2.0, 0) + forward * 1.0
+	
 	var space_state := get_world_3d().direct_space_state
 	var query := PhysicsShapeQueryParameters3D.new()
 	var box_shape := BoxShape3D.new()
-	box_shape.size = attack_hit_area
+	box_shape.size = mesh.size
 	query.shape = box_shape
 	query.transform = global_transform * Transform3D(Basis().rotated(Vector3.UP, body_yaw), local_pos)
-
+	
 	var results := space_state.intersect_shape(query)
 	for result in results:
 		var collider = result.get("collider")

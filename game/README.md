@@ -46,18 +46,6 @@ The `Online.gd` global script handles the connection logic for both direct IP an
 
 ---
 
-### WorldNet.gd (Autoload)
-
-Host-authoritative sync for **holdable items**, **inventory world mutations**, **trees**, and **melee hits**.
-
-* **Authority:** The lobby host owns world object lifecycle and hit validation. Clients send requests (`request_grab`, `request_attack`, `request_pickup`, `request_drop`, …); the host applies and replicates.
-* **Items:** Scene-placed holdables get stable `item_id`s. **While held, the holding peer simulates** follow speed + world collisions and streams poses; free items stay host-simulated. Remotes interpolate those snapshots. On the host, a client-held item is a **kinematic** puppet (so it can push free rigidbodies). Grab/release/pickup/drop stay host-validated. Late-join snapshots replace client items with an **immediate** rebuild (not `queue_free`) so deferred frees cannot wipe the new id registry.
-* **Melee:** Attacker plays VFX locally; the host also broadcasts a reliable attack FX RPC so other peers see the swing. The host rebuilds the hit box and calls `take_damage` (trees → log spawn on kill).
-* **Inventory:** Slot UI is private to each player. Pickup/drop go through the host so the shared world stays consistent (despawn on pickup, spawn on drop). HUD input uses the **player** multiplayer authority (not the HUD node).
-* **Late join:** When a peer connects, the host sends a world snapshot (`sync_world_to_peer`) so items/trees match.
-
----
-
 ### PlayerData Resource
 
 A custom **[Resource](https://docs.godotengine.org/en/stable/tutorials/scripting/resources.html)** responsible for storing essential peer information, including multiplayer ID, display name, character color, and Steam ID.

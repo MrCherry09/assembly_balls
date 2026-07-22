@@ -29,7 +29,6 @@ buses/default_bus_layout=""
 [autoload]
 
 Online="*uid://c8kw5ggqk6vdo"
-WorldNet="*res://scripts/globals/WorldNet.gd"
 
 [display]
 
