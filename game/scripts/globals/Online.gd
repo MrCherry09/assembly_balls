@@ -135,6 +135,12 @@ func _setup_steam_multiplayer() -> void:
 	Steam.lobby_joined.connect(_on_steam_lobby_join_response)
 	Steam.join_requested.connect(_on_steam_join_requested)
 
+## Steam defaults lobby search to DISTANCE_FILTER_CLOSE (local region). Call this
+## before any requestLobbyList so ISP/IP routing changes don't hide remote hosts.
+func request_steam_lobby_list() -> void:
+	Steam.addRequestLobbyListDistanceFilter(Steam.LOBBY_DISTANCE_FILTER_WORLDWIDE)
+	Steam.requestLobbyList()
+
 func _on_steam_lobby_created(connection_response: int, lobby_id: int) -> void:
 	match connection_response:
 		Steam.RESULT_OK:
