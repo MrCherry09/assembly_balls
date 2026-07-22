@@ -2,7 +2,7 @@ extends Node
 class_name ItemGrabber
 
 ## Free-cursor grab: LMB picks an item; mouse moves it on a depth plane in world space.
-## Release keeps the item's current velocity so a flick throws it.
+## In multiplayer, grab/drag/release go through WorldNet (host-authoritative).
 
 const PICKUP_ACTION: StringName = &"pickup_holdable_item"
 
@@ -25,11 +25,18 @@ var _grab_depth: float = 0.0
 var _grab_offset: Vector3 = Vector3.ZERO
 ## Smoothed velocity while dragging — used as throw impulse on release.
 var _throw_velocity: Vector3 = Vector3.ZERO
+var _pending_grab_id: int = 0
 
 @onready var _player: PlayerCharacter = get_parent() as PlayerCharacter
 
 func _ready() -> void:
 	_ensure_pickup_action()
+	if not WorldNet.item_held.is_connected(_on_item_held):
+		WorldNet.item_held.connect(_on_item_held)
+	if not WorldNet.item_released.is_connected(_on_item_released):
+		WorldNet.item_released.connect(_on_item_released)
+	if not WorldNet.inventory_granted.is_connected(_on_inventory_granted):
+		WorldNet.inventory_granted.connect(_on_inventory_granted)
 
 func _ensure_pickup_action() -> void:
 	if not InputMap.has_action(PICKUP_ACTION):
@@ -59,10 +66,18 @@ func _is_local_player() -> bool:
 		return _player.is_multiplayer_authority()
 	return true
 
+func _my_peer_id() -> int:
+	if multiplayer.has_multiplayer_peer():
+		return multiplayer.get_unique_id()
+	return 1
+
 func _hud() -> HUD:
 	if _player == null:
 		return null
 	return _player.hud as HUD
+
+func _uses_world_net() -> bool:
+	return WorldNet != null and WorldNet.is_net_active()
 
 func _input(event: InputEvent) -> void:
 	if not _is_local_player():
@@ -102,14 +117,50 @@ func _physics_process(delta: float) -> void:
 	if not _grab_held:
 		_release_held()
 		return
-	# While looking, cursor is captured — keep dragging via the pre-capture screen pos
-	# so the item tracks that point as the camera moves.
 	_drag_on_depth_plane(delta)
 
 func _drag_cursor_vp() -> Vector2:
 	if _look_busy() and _player and _player.cam_holder:
 		return _player.cam_holder.get_drag_cursor_vp()
 	return get_viewport().get_mouse_position()
+
+func _on_item_held(item_id: int, peer_id: int) -> void:
+	if not _is_local_player():
+		return
+	if peer_id != _my_peer_id():
+		return
+	var item := WorldNet.get_item(item_id)
+	if item == null:
+		return
+	held_item = item
+	_grab_held = true
+	if _pending_grab_id == item_id or _grab_depth <= 0.0:
+		_ensure_grab_depth_for(item)
+	_pending_grab_id = 0
+
+func _on_item_released(item_id: int) -> void:
+	if held_item and is_instance_valid(held_item) and held_item.item_id == item_id:
+		held_item = null
+		_grab_held = false
+		_grab_depth = 0.0
+		_grab_offset = Vector3.ZERO
+		_throw_velocity = Vector3.ZERO
+
+func _on_inventory_granted(scene_path: String, icon_path: String) -> void:
+	if not _is_local_player():
+		return
+	var hud := _hud()
+	if hud:
+		hud.add_inventory_item_from_net(scene_path, icon_path)
+
+func _ensure_grab_depth_for(item: HoldableItem) -> void:
+	var cam := _camera()
+	if cam == null:
+		return
+	var mouse := _drag_cursor_vp()
+	var from := cam.project_ray_origin(mouse)
+	_grab_depth = from.distance_to(item.global_position)
+	_grab_offset = Vector3.ZERO
 
 func _try_grab() -> bool:
 	if held_item != null:
@@ -125,10 +176,13 @@ func _try_grab() -> bool:
 		return false
 	var mouse := _drag_cursor_vp()
 	var from: Vector3 = hit.from if hit.has("from") else cam.project_ray_origin(mouse)
-	# Lock depth at the surface under the cursor — object stays at that world distance.
 	_grab_depth = from.distance_to(hit.position)
 	_grab_offset = item.global_position - hit.position
 	_throw_velocity = Vector3.ZERO
+	if _uses_world_net():
+		_pending_grab_id = item.item_id
+		WorldNet.request_grab(item.item_id)
+		return true
 	held_item = item
 	held_item.set_held(self, true)
 	return true
@@ -139,6 +193,14 @@ func _try_pickup_to_inventory() -> void:
 		return
 
 	if held_item != null and is_instance_valid(held_item):
+		if _uses_world_net():
+			WorldNet.request_pickup(held_item.item_id)
+			held_item = null
+			_grab_held = false
+			_grab_depth = 0.0
+			_grab_offset = Vector3.ZERO
+			_throw_velocity = Vector3.ZERO
+			return
 		if hud.try_add_holdable_item(held_item):
 			var item := held_item
 			held_item = null
@@ -149,19 +211,20 @@ func _try_pickup_to_inventory() -> void:
 			item.queue_free()
 		return
 
-	var cam := _camera()
-	if cam == null:
-		return
 	var hit := _raycast_at_mouse()
 	if hit.is_empty():
 		return
 	var item := _find_holdable(hit.collider)
 	if item == null or item.is_held:
 		return
+	if _uses_world_net():
+		WorldNet.request_pickup(item.item_id)
+		return
 	if hud.try_add_holdable_item(item):
 		item.queue_free()
 
 func begin_inventory_drag(item: HoldableItem) -> bool:
+	## Offline-only path. Multiplayer drops go through WorldNet.request_drop.
 	if not _is_local_player():
 		return false
 	if item == null or held_item != null:
@@ -184,12 +247,29 @@ func begin_inventory_drag(item: HoldableItem) -> bool:
 	held_item.set_held(self, true)
 	return true
 
+func begin_net_inventory_drag(scene_path: String) -> void:
+	if not _is_local_player():
+		return
+	var cam := _camera()
+	if cam == null:
+		return
+	var mouse := _drag_cursor_vp()
+	var origin := cam.project_ray_origin(mouse)
+	var dir := cam.project_ray_normal(mouse)
+	var target := origin + dir * inventory_drag_depth
+	_grab_depth = inventory_drag_depth
+	_grab_offset = Vector3.ZERO
+	_throw_velocity = Vector3.ZERO
+	_grab_held = true
+	WorldNet.request_drop(scene_path, target, true)
+
 func _release_held() -> void:
 	if held_item == null or not is_instance_valid(held_item):
 		held_item = null
 		_grab_depth = 0.0
 		_grab_offset = Vector3.ZERO
 		_throw_velocity = Vector3.ZERO
+		_pending_grab_id = 0
 		return
 	var item := held_item
 	var release_vel := _throw_velocity
@@ -198,11 +278,16 @@ func _release_held() -> void:
 	release_vel *= throw_velocity_scale
 	if release_vel.length() > throw_max_speed:
 		release_vel = release_vel.normalized() * throw_max_speed
+	var item_id := item.item_id
 	held_item = null
 	_grab_depth = 0.0
 	_grab_offset = Vector3.ZERO
 	_throw_velocity = Vector3.ZERO
-	item.set_held(self, false, release_vel)
+	_pending_grab_id = 0
+	if _uses_world_net():
+		WorldNet.request_release(item_id, release_vel)
+	else:
+		item.set_held(self, false, release_vel)
 
 func _drag_on_depth_plane(delta: float) -> void:
 	var cam := _camera()
@@ -212,8 +297,14 @@ func _drag_on_depth_plane(delta: float) -> void:
 	var origin := cam.project_ray_origin(mouse)
 	var dir := cam.project_ray_normal(mouse)
 	var target := origin + dir * _grab_depth + _grab_offset
+	if _uses_world_net():
+		WorldNet.update_drag_target(held_item.item_id, target)
+		# Holder simulates locally; sample real velocity for throws.
+		var sample := held_item.linear_velocity
+		var blend := clampf(18.0 * delta, 0.0, 1.0)
+		_throw_velocity = _throw_velocity.lerp(sample, blend)
+		return
 	held_item.drive_toward(target, hold_follow_speed, delta)
-	# Blend toward current drag velocity so a flick still has momentum on release.
 	var sample := held_item.linear_velocity
 	var blend := clampf(18.0 * delta, 0.0, 1.0)
 	_throw_velocity = _throw_velocity.lerp(sample, blend)
