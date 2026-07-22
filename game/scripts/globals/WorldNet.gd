@@ -6,7 +6,8 @@ extends Node
 const HOLD_FOLLOW_SPEED := 12.0
 const GRAB_RANGE := 12.0
 const PICKUP_RANGE := 12.0
-## Steam peers choke if we flood the reliable channel every physics tick.
+## Steam peers often drop unreliable RPCs; send poses on the reliable channel.
+## Held items sync every physics tick; free items at this interval.
 const POSE_SYNC_INTERVAL_SEC := 0.05
 const POSE_STRIDE := 11 # id, px,py,pz, rx,ry,rz, holder, vx,vy,vz
 
@@ -175,15 +176,21 @@ func _physics_process(delta: float) -> void:
 		item.drive_toward(_drag_targets[item_id], HOLD_FOLLOW_SPEED, delta)
 	if not is_net_active():
 		return
-	_pose_sync_timer += delta
-	if _pose_sync_timer < POSE_SYNC_INTERVAL_SEC:
-		return
-	_pose_sync_timer = 0.0
 	if multiplayer.is_server():
+		# Host-held: every tick.
 		if _peer_holds_any(my_id):
 			_broadcast_item_poses(true, false, my_id)
-		_broadcast_item_poses(false, true, 0)
+		# While anything is held, stream free-item poses every tick so kinematic
+		# pushes from a remote holder's puppet show up immediately.
+		if not _holders.is_empty():
+			_broadcast_item_poses(false, true, 0)
+		else:
+			_pose_sync_timer += delta
+			if _pose_sync_timer >= POSE_SYNC_INTERVAL_SEC:
+				_pose_sync_timer = 0.0
+				_broadcast_item_poses(false, true, 0)
 	elif _peer_holds_any(my_id):
+		# Client holder streams their simulated poses to host + other peers.
 		_broadcast_item_poses(true, false, my_id)
 
 func _local_peer_id() -> int:
