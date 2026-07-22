@@ -8,6 +8,7 @@ const INVENTORY_PICKUP_ACTION: StringName = &"pickup_holdable_item"
 @export var INVENTORY_COLUMNS: int = 5
 @export var INVENTORY_HEIGHT_SCALE: float = 0.5
 const DEFAULT_INVENTORY_ICON: Texture2D = preload("res://icon.png")
+const INVENTORY_SLOT_SCRIPT: GDScript = preload("res://scenes/player_character/dependencies/hud/inventory_slot.gd")
 
 @export var play_char: PlayerCharacter
 @export var crosshair: Control
@@ -82,13 +83,15 @@ func _setup_inventory_ui() -> void:
 
 	for slot_index in INVENTORY_SLOT_COUNT:
 		var slot := PanelContainer.new()
+		slot.set_script(INVENTORY_SLOT_SCRIPT)
+		slot.slot_index = slot_index
+		slot.hud = self
 		slot.name = "Slot_%02d" % (slot_index + 1)
 		slot.mouse_filter = Control.MOUSE_FILTER_STOP
 		slot.mouse_default_cursor_shape = Control.CURSOR_ARROW
 		slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		slot.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		slot.add_theme_stylebox_override("panel", _inventory_slot_style)
-		slot.gui_input.connect(Callable(self, "_on_inventory_slot_gui_input").bind(slot_index))
 
 		var icon := TextureRect.new()
 		icon.name = "SlotIcon"
@@ -232,12 +235,6 @@ func _try_begin_inventory_slot_drag(slot_index: int) -> void:
 		return
 	_clear_inventory_slot(slot_index)
 
-func _on_inventory_slot_gui_input(event: InputEvent, slot_index: int) -> void:
-	if not inventory_open:
-		return
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		_try_begin_inventory_slot_drag(slot_index)
-		get_viewport().set_input_as_handled()
 
 func _set_inventory_open(value: bool) -> void:
 	if inventory_open == value:
