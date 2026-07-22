@@ -177,26 +177,59 @@ func host_steam_lobby() -> ErrorCodes:
 	is_busy = false
 	return error_response
 
-func _on_steam_join_requested(lobby_id: int, _steam_id: int) -> void: join_steam_lobby(lobby_id)
+func _on_steam_join_requested(lobby_id: int, _steam_id: int) -> void:
+	join_steam_lobby(lobby_id)
 
 func join_steam_lobby(lobby_id: int = 0) -> ErrorCodes:
-	if is_busy: return ErrorCodes.CURRENTLY_BUSY
-	is_joining = true
-	if lobby_id != steam_lobby_id and steam_lobby_id != 0: leave_lobby()
-	is_host = false
-	steam_lobby_id = lobby_id
+	if is_busy:
+		return ErrorCodes.CURRENTLY_BUSY
+	if lobby_id == 0:
+		return ErrorCodes.FAILED
 	is_busy = true
+	is_joining = true
+	is_host = false
+	# Leave any previous session without clearing the join-in-progress flags.
+	if steam_lobby_id != 0 and steam_lobby_id != lobby_id:
+		if multiplayer.multiplayer_peer:
+			multiplayer.multiplayer_peer.close()
+			multiplayer.multiplayer_peer = null
+		Steam.leaveLobby(steam_lobby_id)
+		steam_lobby_id = 0
+		players.clear()
+	steam_lobby_id = lobby_id
 	Steam.joinLobby(lobby_id)
-	var error: ErrorCodes = await lobby_join_response
+	# Timeout so a bad lobby id can't leave is_busy stuck forever.
+	var error: ErrorCodes = ErrorCodes.NO_RESPONSE
+	var timed_out := false
+	var on_timeout := func() -> void:
+		timed_out = true
+		if is_joining:
+			lobby_join_response.emit(ErrorCodes.STEAM_CONNECTION_ERROR)
+	get_tree().create_timer(12.0).timeout.connect(on_timeout, CONNECT_ONE_SHOT)
+	error = await lobby_join_response
 	is_joining = false
-	if error == ErrorCodes.SUCCESS: joined_lobby.emit()
 	is_busy = false
+	if timed_out and error == ErrorCodes.STEAM_CONNECTION_ERROR:
+		steam_lobby_id = 0
+	if error == ErrorCodes.SUCCESS:
+		joined_lobby.emit()
 	return error
 
 func _on_steam_lobby_join_response(lobby_id: int, _permissions: int, _locked: bool, response: int) -> void:
+	# Creating a lobby also fires lobby_joined for the host — ignore unless we are joining.
+	if not is_joining:
+		return
+	# ChatRoomEnterResponseSuccess == 1; RESULT_OK is also 1, but failures use enter-response codes.
+	if response != 1:
+		lobby_join_response.emit(ErrorCodes.STEAM_CONNECTION_ERROR)
+		return
 	var lobby_owner_id: int = Steam.getLobbyOwner(lobby_id)
-	if lobby_owner_id == Steam.getSteamID(): lobby_join_response.emit(ErrorCodes.JOIN_FAILED_SAME_OWNER_ID); return
-	if response != Steam.RESULT_OK: lobby_join_response.emit(ErrorCodes.STEAM_CONNECTION_ERROR); return
+	if lobby_owner_id == 0:
+		lobby_join_response.emit(ErrorCodes.STEAM_CONNECTION_ERROR)
+		return
+	if lobby_owner_id == Steam.getSteamID():
+		lobby_join_response.emit(ErrorCodes.JOIN_FAILED_SAME_OWNER_ID)
+		return
 	var new_steam_peer := _create_steam_peer()
 	var error := new_steam_peer.create_client(lobby_owner_id, 0)
 	match error:
@@ -207,7 +240,8 @@ func _on_steam_lobby_join_response(lobby_id: int, _permissions: int, _locked: bo
 			lobby_join_response.emit(ErrorCodes.SUCCESS)
 		_:
 			new_steam_peer.close()
-			Steam.leaveLobby(steam_lobby_id)
+			Steam.leaveLobby(lobby_id)
+			steam_lobby_id = 0
 			lobby_join_response.emit(ErrorCodes.FAILED)
 
 func _create_steam_peer() -> SteamMultiplayerPeer:
