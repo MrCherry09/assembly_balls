@@ -66,6 +66,9 @@ func _is_local_player() -> bool:
 		return _player.is_multiplayer_authority()
 	return true
 
+func _gameplay_blocked() -> bool:
+	return _player != null and _player.is_gameplay_blocked()
+
 func _my_peer_id() -> int:
 	if multiplayer.has_multiplayer_peer():
 		return multiplayer.get_unique_id()
@@ -81,6 +84,11 @@ func _uses_world_net() -> bool:
 
 func _input(event: InputEvent) -> void:
 	if not _is_local_player():
+		return
+	if _gameplay_blocked():
+		if _grab_held or held_item != null:
+			_grab_held = false
+			_release_held()
 		return
 	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT):
 		return
@@ -101,7 +109,7 @@ func _input(event: InputEvent) -> void:
 		_release_held()
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not _is_local_player():
+	if not _is_local_player() or _gameplay_blocked():
 		return
 	if not event.is_action_pressed(PICKUP_ACTION):
 		return
@@ -109,7 +117,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 
 func _physics_process(delta: float) -> void:
-	if not _is_local_player():
+	if not _is_local_player() or _gameplay_blocked():
 		return
 	if held_item == null or not is_instance_valid(held_item):
 		held_item = null

@@ -36,15 +36,15 @@ func applies() -> void:
 			transitioned.emit(self, "JumpState")
 
 func input_management() -> void:
-	if Input.is_action_just_pressed(play_char.jump_action):
+	if play_char.action_just_pressed(play_char.jump_action):
 		if play_char.jump_cooldown < 0.0 and !raycast_verification():
 			transitioned.emit(self, "JumpState")
 	if play_char.continious_crouch:
-		if Input.is_action_just_pressed(play_char.crouch_action):
+		if play_char.action_just_pressed(play_char.crouch_action):
 			if !raycast_verification():
 				play_char.walk_or_run = "WalkState"
 				transitioned.emit(self, "WalkState")
-	elif !Input.is_action_pressed(play_char.crouch_action):
+	elif !play_char.action_pressed(play_char.crouch_action):
 		if !raycast_verification():
 			play_char.walk_or_run = "WalkState"
 			transitioned.emit(self, "WalkState")
@@ -53,6 +53,6 @@ func raycast_verification() -> bool:
 	return play_char.ceiling_check.is_colliding()
 
 func move() -> void:
-	play_char.input_direction = Input.get_vector(play_char.move_left_action, play_char.move_right_action, play_char.move_forward_action, play_char.move_backward_action)
+	play_char.input_direction = play_char.get_move_input()
 	play_char.move_direction = (play_char.cam_holder.global_basis * Vector3(play_char.input_direction.x, 0.0, play_char.input_direction.y)).normalized()
 	play_char.set_horizontal_velocity_from_input(play_char.move_direction, play_char.move_speed)

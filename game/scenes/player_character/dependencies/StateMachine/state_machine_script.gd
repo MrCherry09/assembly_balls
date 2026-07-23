@@ -24,11 +24,13 @@ func _ready() -> void:
 		curr_state_name = curr_state.state_name
 		
 func _process(delta : float) -> void:
+	# Keep running while paused so animations/state stay live (multiplayer).
+	# Input itself is neutralized via PlayerCharacter input helpers.
 	if curr_state: curr_state.update(delta)
 	
 func _physics_process(delta: float) -> void:
 	if curr_state: curr_state.physics_update(delta)
-	
+
 func on_state_child_transition(state : State, new_state_name: String) -> void:
 	#manage the transition from one state to another
 	

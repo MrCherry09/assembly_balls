@@ -209,6 +209,12 @@ func _set_orbiting(orbiting: bool) -> void:
 
 func _unhandled_input(event) -> void:
 	if multiplayer and not is_multiplayer_authority(): return
+	if play_char is PlayerCharacter and (play_char as PlayerCharacter).is_gameplay_blocked():
+		_set_orbiting(false)
+		is_aiming = false
+		_was_aiming = false
+		_sync_mouse_mode()
+		return
 	if event is InputEventMouseMotion:
 		_handle_mouse_motion(event)
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
@@ -223,6 +229,16 @@ func _unhandled_input(event) -> void:
 
 func _process(delta: float) -> void:
 	if multiplayer.has_multiplayer_peer() and not is_multiplayer_authority():
+		return
+	if play_char is PlayerCharacter and (play_char as PlayerCharacter).is_gameplay_blocked():
+		_set_orbiting(false)
+		is_aiming = false
+		_was_aiming = false
+		_sync_mouse_mode()
+		# Still follow the player so the view doesn't detach behind the menu.
+		global_position = _pivot_origin_from_player(play_char.get_global_transform_interpolated())
+		_apply_look_rotation()
+		_update_camera_position(delta)
 		return
 	state = play_char.state_machine.curr_state_name
 	if camera.v_offset != 0.0:
@@ -366,6 +382,11 @@ func _sync_mouse_mode() -> void:
 	if not is_multiplayer_authority():
 		return
 	if not camera.current:
+		return
+	if play_char is PlayerCharacter and (play_char as PlayerCharacter).is_gameplay_blocked():
+		if _mouse_captured:
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+			_mouse_captured = false
 		return
 	var want_capture := _orbiting or is_aiming
 	if want_capture:

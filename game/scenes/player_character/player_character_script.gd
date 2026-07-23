@@ -177,6 +177,32 @@ func _process(delta: float) -> void:
 	_update_model_visuals(delta)
 	_update_nick_label()
 
+func is_gameplay_blocked() -> bool:
+	## True while the lobby pause / main menu is open (local menus only).
+	if not is_multiplayer_authority() and multiplayer.has_multiplayer_peer():
+		return false
+	var scene := get_tree().current_scene
+	if scene and scene.has_method("is_gameplay_blocked"):
+		return scene.is_gameplay_blocked()
+	return false
+
+## Input helpers — states use these so pausing suppresses control input WITHOUT
+## freezing simulation or animation (physics, gravity, landings still run).
+func get_move_input() -> Vector2:
+	if is_gameplay_blocked():
+		return Vector2.ZERO
+	return Input.get_vector(move_left_action, move_right_action, move_forward_action, move_backward_action)
+
+func action_just_pressed(action: StringName) -> bool:
+	if is_gameplay_blocked():
+		return false
+	return Input.is_action_just_pressed(action)
+
+func action_pressed(action: StringName) -> bool:
+	if is_gameplay_blocked():
+		return false
+	return Input.is_action_pressed(action)
+
 func _physics_process(_delta: float) -> void:
 	if multiplayer.has_multiplayer_peer() and not is_multiplayer_authority():
 		return

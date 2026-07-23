@@ -45,13 +45,27 @@ func _setup_world_net() -> void:
 func toggle_ui(should_show_menu: bool, is_loading: bool = false) -> void:
 	if should_show_menu:
 		main_menu.show_menu()
-		steam_friends_list.hide()
-		if is_loading: in_game_ui.show()
-		else: in_game_ui.hide()
 	else:
 		main_menu.hide_menu()
-		in_game_ui.show()
+	# Pause / invite UI is Escape-only — never open it just because a session started.
+	_set_pause_menu_open(false)
 	main_menu.loading = is_loading
+
+func is_gameplay_blocked() -> bool:
+	## Local input should not reach the world while a menu is up.
+	return in_game_ui.visible or main_menu.visible
+
+func _set_pause_menu_open(open: bool) -> void:
+	if open:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		if Online.steam_lobby_id:
+			steam_friends_list.show()
+		else:
+			steam_friends_list.hide()
+		in_game_ui.show()
+	else:
+		in_game_ui.hide()
+		steam_friends_list.hide()
 
 func _update_lobby_info_button() -> void: lobby_info_button.text = "IP/Lobby ID: \n\n%s" % _current_lobby
 
@@ -140,13 +154,10 @@ func _on_quit_requested() -> void:
 
 func _input(event: InputEvent) -> void:
 	if Input.is_action_just_pressed("ui_cancel"):
-		if main_menu.visible: return
-		if in_game_ui.visible: in_game_ui.hide()
-		else:
-			if Input.mouse_mode != Input.MOUSE_MODE_VISIBLE: Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-			if Online.steam_lobby_id: steam_friends_list.show()
-			else: steam_friends_list.hide()
-			in_game_ui.show()
+		if main_menu.visible:
+			return
+		_set_pause_menu_open(not in_game_ui.visible)
+		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("toggle_fullscreen"):
 		var current_mode = DisplayServer.window_get_mode()
 		if current_mode == DisplayServer.WINDOW_MODE_WINDOWED: DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)

@@ -384,6 +384,10 @@ func _cicle_ui(new_cicle_index: int = _ui_cicle_index + 1) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not _is_local_hud():
 		return
+	if play_char and play_char.is_gameplay_blocked():
+		if inventory_open:
+			_set_inventory_open(false)
+		return
 	if event.is_action_pressed("cicle_player_hud"):
 		_cicle_ui()
 		get_viewport().set_input_as_handled()

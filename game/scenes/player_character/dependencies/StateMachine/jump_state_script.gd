@@ -39,12 +39,12 @@ func applies(delta: float) -> void:
 			transitioned.emit(self, "IdleState")
 
 func input_management() -> void:
-	if Input.is_action_just_pressed(play_char.jump_action):
+	if play_char.action_just_pressed(play_char.jump_action):
 		if play_char.jump_cooldown < 0.0:
 			jump()
 
 func move() -> void:
-	play_char.input_direction = Input.get_vector(play_char.move_left_action, play_char.move_right_action, play_char.move_forward_action, play_char.move_backward_action)
+	play_char.input_direction = play_char.get_move_input()
 	play_char.move_direction = (play_char.cam_holder.global_basis * Vector3(play_char.input_direction.x, 0.0, play_char.input_direction.y)).normalized()
 	if !play_char.is_on_floor():
 		play_char.set_horizontal_velocity_from_input(play_char.move_direction, play_char.current_ground_move_speed())
