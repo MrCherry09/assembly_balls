@@ -43,8 +43,7 @@ var _net_age_sec: float = 0.0
 var _has_net_pose: bool = false
 
 func _ready() -> void:
-	if mesh_instance == null:
-		mesh_instance = get_node_or_null("MeshInstance3D") as MeshInstance3D
+	_resolve_mesh_instance()
 	add_to_group("holdable_items")
 	_default_gravity_scale = free_gravity_scale
 	gravity_scale = free_gravity_scale
@@ -58,6 +57,43 @@ func _ready() -> void:
 	contact_monitor = true
 	max_contacts_reported = 8
 
+func _resolve_mesh_instance() -> void:
+	if mesh_instance != null and is_instance_valid(mesh_instance):
+		return
+	mesh_instance = get_node_or_null("MeshInstance3D") as MeshInstance3D
+	if mesh_instance == null:
+		mesh_instance = _find_first_mesh(self)
+
+func _find_first_mesh(node: Node) -> MeshInstance3D:
+	if node is MeshInstance3D:
+		return node as MeshInstance3D
+	for child in node.get_children():
+		var found := _find_first_mesh(child)
+		if found:
+			return found
+	return null
+
+func _set_outline_visible(visible_outline: bool) -> void:
+	_resolve_mesh_instance()
+	if mesh_instance == null or outline_material == null:
+		return
+	mesh_instance.material_overlay = outline_material if visible_outline else null
+	# Also outline any sibling/child meshes (multi-part props).
+	for child_mesh in _all_meshes(self):
+		if child_mesh == mesh_instance:
+			continue
+		child_mesh.material_overlay = outline_material if visible_outline else null
+
+func _all_meshes(node: Node) -> Array[MeshInstance3D]:
+	var result: Array[MeshInstance3D] = []
+	_collect_meshes(node, result)
+	return result
+
+func _collect_meshes(node: Node, out: Array[MeshInstance3D]) -> void:
+	if node is MeshInstance3D:
+		out.append(node as MeshInstance3D)
+	for child in node.get_children():
+		_collect_meshes(child, out)
 func get_spawn_scene_path() -> String:
 	if spawn_scene_path != "":
 		return spawn_scene_path
@@ -103,9 +139,8 @@ func apply_network_pose(pos: Vector3, rot: Vector3, held: bool, peer_id: int, ve
 	is_held = held
 	holder_peer_id = peer_id if held else 0
 	gravity_scale = 0.0 if held else _default_gravity_scale
-	if mesh_instance and outline_material and was_held != held:
-		mesh_instance.material_overlay = outline_material if held else null
-
+	if was_held != held:
+		_set_outline_visible(held)
 	_net_pos = pos
 	_net_rot = rot
 	# Held bodies often report velocity into walls/props while physically blocked —
@@ -203,9 +238,7 @@ func _apply_held_physics(held: bool, release_velocity: Vector3) -> void:
 			_net_vel = Vector3.ZERO
 			_net_age_sec = 0.0
 			_has_net_pose = true
-	if mesh_instance and outline_material:
-		mesh_instance.material_overlay = outline_material if held else null
-
+	_set_outline_visible(held)
 func drive_toward(target: Vector3, follow_speed: float, _delta: float) -> void:
 	if not is_held:
 		return

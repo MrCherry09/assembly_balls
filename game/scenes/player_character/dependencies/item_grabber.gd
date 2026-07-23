@@ -94,7 +94,7 @@ func _input(event: InputEvent) -> void:
 		return
 	if event.pressed:
 		var hud := _hud()
-		if hud and hud.is_point_over_inventory_ui(event.position):
+		if hud and hud.is_point_over_hud_ui(event.position):
 			return
 		if _look_busy():
 			if held_item == null and _player.has_method("attack"):

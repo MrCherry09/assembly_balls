@@ -68,11 +68,12 @@ shadow_mesh = SubResource("ArrayMesh_alt4s")
 [sub_resource type="BoxShape3D" id="BoxShape3D_g4v7s"]
 size = Vector3(0.09, 1.35, 1.1)
 
-[node name="MetalSheet" type="RigidBody3D" unique_id=20517615]
+[node name="MetalSheet" type="RigidBody3D" unique_id=20517615 node_paths=PackedStringArray("mesh_instance")]
 transform = Transform3D(-4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 0, 0, 1, 0, 0, 0)
 collision_layer = 4
 collision_mask = 5
 script = ExtResource("1_ajebi")
+mesh_instance = NodePath("Mesh")
 mass_kg = 10.0
 inventory_icon = SubResource("CompressedTexture2D_b707i")
 metadata/_custom_type_script = "uid://l4bk87lb5lf3"

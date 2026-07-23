@@ -34,6 +34,7 @@ const INVENTORY_SLOT_SCRIPT: GDScript = preload("res://scenes/player_character/d
 @onready var inventory_slots_grid: GridContainer = %InventorySlotsGrid
 var look_hint_label: Label
 var inventory_open: bool = false
+var tool_hotbar: ToolHotbar
 var _inventory_tween: Tween
 var _inventory_slot_style: StyleBoxFlat
 var _inventory_slot_icons: Array[TextureRect] = []
@@ -45,11 +46,31 @@ func _ready() -> void:
 	_ensure_inventory_pickup_action()
 	get_viewport().size_changed.connect(_refresh_inventory_layout)
 	_setup_inventory_ui()
+	_setup_tool_hotbar()
 	_cicle_ui(0)
 	_setup_look_hint_label()
 	_hide_removed_debug_rows()
 	_refresh_inventory_layout()
 	inventory_root.visible = false
+
+func _setup_tool_hotbar() -> void:
+	tool_hotbar = ToolHotbar.new()
+	tool_hotbar.name = "ToolHotbar"
+	tool_hotbar.hud = self
+	add_child(tool_hotbar)
+
+func get_selected_hotbar_index() -> int:
+	if tool_hotbar == null:
+		return 0
+	return tool_hotbar.get_selected_index()
+
+func get_selected_tool() -> ToolDefinition:
+	if tool_hotbar == null:
+		return null
+	return tool_hotbar.get_selected_tool()
+
+func is_local_hud() -> bool:
+	return _is_local_hud()
 
 func _ensure_inventory_action() -> void:
 	if not InputMap.has_action(INVENTORY_TOGGLE_ACTION):
@@ -189,6 +210,12 @@ func is_point_over_inventory_ui(point: Vector2) -> bool:
 		return false
 	return inventory_panel.get_global_rect().has_point(point)
 
+func is_point_over_tool_hotbar(point: Vector2) -> bool:
+	return tool_hotbar != null and tool_hotbar.is_point_over(point)
+
+func is_point_over_hud_ui(point: Vector2) -> bool:
+	return is_point_over_inventory_ui(point) or is_point_over_tool_hotbar(point)
+
 func _instantiate_inventory_item(slot_index: int) -> HoldableItem:
 	if slot_index < 0 or slot_index >= _inventory_slot_scene_paths.size():
 		return null
@@ -320,7 +347,7 @@ func _setup_look_hint_label() -> void:
 	look_hint_label = Label.new()
 	look_hint_label.name = "LookHintLabel"
 	look_hint_label.position = Vector2(16, 16)
-	look_hint_label.text = "RMB look  |  V aim  |  E pickup  |  Tab inventory  |  LMB grab items (free cursor)"
+	look_hint_label.text = "RMB look  |  V aim  |  E pickup  |  Tab inventory  |  1-9 / scroll tools  |  LMB grab items (free cursor)"
 
 	look_hint_label.add_theme_font_size_override("font_size", 18)
 	look_hint_label.add_theme_color_override("font_outline_color", Color.BLACK)
@@ -334,6 +361,8 @@ func _process(_delta: float) -> void:
 		return
 	if not visible:
 		show()
+	if tool_hotbar:
+		tool_hotbar.visible = true
 	display_current_FPS()
 	display_properties()
 	if look_hint_label and not look_hint_label.visible:
