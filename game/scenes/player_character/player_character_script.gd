@@ -327,4 +327,7 @@ func _local_attack_query() -> void:
 	for result in results:
 		var collider = result.get("collider")
 		if collider and collider.has_method("take_damage") and collider != self:
-			collider.take_damage(attack_damage)
+			if collider is TreePlaceholder:
+				collider.take_damage(attack_damage, body_yaw)
+			else:
+				collider.take_damage(attack_damage)

@@ -52,7 +52,7 @@ Host-authoritative sync for **holdable items**, **inventory world mutations**, *
 
 * **Authority:** The lobby host owns world object lifecycle and hit validation. Clients send requests (`request_grab`, `request_attack`, `request_pickup`, `request_drop`, …); the host applies and replicates.
 * **Items:** Scene-placed holdables get stable `item_id`s. Free physics and held drag run on the host; all clients (including the holder) ease toward host pose+velocity RPCs so collisions match. Late-join snapshots replace client items with an **immediate** rebuild (not `queue_free`) so deferred frees cannot wipe the new id registry.
-* **Melee:** Attacker plays VFX locally; the host also broadcasts a reliable attack FX RPC so other peers see the swing. The host rebuilds the hit box and calls `take_damage` (trees → log spawn on kill).
+* **Melee:** Attacker plays VFX locally; the host also broadcasts a reliable attack FX RPC so other peers see the swing. The host rebuilds the hit box and calls `take_damage`. On tree kill the host spawns logs and broadcasts a shared break/fall animation (`fall_yaw`) so every peer tips the same way before freeing the tree.
 * **Inventory:** Slot UI is private to each player. Pickup/drop go through the host so the shared world stays consistent (despawn on pickup, spawn on drop). HUD input uses the **player** multiplayer authority (not the HUD node).
 * **Late join:** When a peer connects, the host sends a world snapshot (`sync_world_to_peer`) so items/trees match.
 

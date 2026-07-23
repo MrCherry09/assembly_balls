@@ -439,7 +439,7 @@ func _server_attack(peer_id: int, damage: float, cooldown_ms: int, hit_area: Vec
 			continue
 		var tree := _find_tree(collider)
 		if tree:
-			tree.take_damage_host(damage)
+			tree.take_damage_host(damage, body_yaw)
 			continue
 		if collider.has_method("take_damage"):
 			collider.take_damage(damage)
@@ -470,6 +470,59 @@ func host_spawn_logs_from_tree(tree: TreePlaceholder, count: int) -> void:
 		if path == "":
 			path = "res://scenes/items/log.tscn"
 		_host_spawn_item(path, tree.global_position + offset, rot, Vector3.ZERO, Vector3.ZERO)
+
+## Host-authoritative tree kill: spawn logs, then play the same break anim on every peer.
+func host_break_tree(tree: TreePlaceholder, log_count: int, fall_yaw: float) -> void:
+	if not is_host() or tree == null:
+		return
+	host_spawn_logs_from_tree(tree, log_count)
+	var tree_id := tree.tree_id
+	if is_net_active():
+		_rpc_break_tree.rpc(tree_id, fall_yaw)
+	else:
+		_trees.erase(tree_id)
+		tree.play_break_animation(fall_yaw)
+
+@rpc("any_peer", "reliable", "call_local")
+func _rpc_break_tree(tree_id: int, fall_yaw: float) -> void:
+	if is_net_active() and not multiplayer.is_server():
+		if multiplayer.get_remote_sender_id() != 1:
+			return
+	var tree := get_tree_by_id(tree_id)
+	_trees.erase(tree_id)
+	if tree == null:
+		tree = _find_tree_by_id_in_group(tree_id)
+	if tree and is_instance_valid(tree):
+		tree.play_break_animation(fall_yaw)
+
+## Chop hit feedback — same small shake on every peer (seed keeps randomization in sync).
+func host_tree_hit_fx(tree_id: int, hit_yaw: float, shake_seed: int) -> void:
+	if not is_host():
+		return
+	if is_net_active():
+		_rpc_tree_hit_fx.rpc(tree_id, hit_yaw, shake_seed)
+	else:
+		var tree := get_tree_by_id(tree_id)
+		if tree:
+			tree.play_hit_shake(hit_yaw, shake_seed)
+
+@rpc("any_peer", "reliable", "call_local")
+func _rpc_tree_hit_fx(tree_id: int, hit_yaw: float, shake_seed: int) -> void:
+	if is_net_active() and not multiplayer.is_server():
+		if multiplayer.get_remote_sender_id() != 1:
+			return
+	var tree := get_tree_by_id(tree_id)
+	if tree == null:
+		tree = _find_tree_by_id_in_group(tree_id)
+	if tree and is_instance_valid(tree):
+		tree.play_hit_shake(hit_yaw, shake_seed)
+
+func _find_tree_by_id_in_group(tree_id: int) -> TreePlaceholder:
+	for node in get_tree().get_nodes_in_group("network_trees"):
+		var candidate := node as TreePlaceholder
+		if candidate and candidate.tree_id == tree_id:
+			return candidate
+	return null
 
 func host_despawn_tree(tree_id: int) -> void:
 	if is_net_active():
