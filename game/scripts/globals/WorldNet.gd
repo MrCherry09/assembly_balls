@@ -14,6 +14,8 @@ const POSE_STRIDE := 11 # id, px,py,pz, rx,ry,rz, holder, vx,vy,vz
 signal item_held(item_id: int, peer_id: int)
 signal item_released(item_id: int)
 signal inventory_granted(scene_path: String, icon_path: String)
+## Despawned for inventory UI drag — does not auto-insert into a slot.
+signal inventory_drag_ready(scene_path: String, icon_path: String)
 
 var items_container: Node3D
 var _next_item_id: int = 1
@@ -354,6 +356,25 @@ func _rpc_request_pickup(item_id: int) -> void:
 	_server_pickup(item_id, multiplayer.get_remote_sender_id())
 
 func _server_pickup(item_id: int, peer_id: int) -> void:
+	_server_take_item_for_inventory(item_id, peer_id, true)
+
+## Despawn a held/world item for UI drag-into-inventory (no auto slot insert).
+func request_inventory_drag_consume(item_id: int) -> void:
+	if not is_net_active():
+		_server_take_item_for_inventory(item_id, 1, false)
+		return
+	if multiplayer.is_server():
+		_server_take_item_for_inventory(item_id, multiplayer.get_unique_id(), false)
+	else:
+		_rpc_request_inventory_drag_consume.rpc_id(1, item_id)
+
+@rpc("any_peer", "reliable")
+func _rpc_request_inventory_drag_consume(item_id: int) -> void:
+	if not multiplayer.is_server():
+		return
+	_server_take_item_for_inventory(item_id, multiplayer.get_remote_sender_id(), false)
+
+func _server_take_item_for_inventory(item_id: int, peer_id: int, grant_to_slot: bool) -> void:
 	var item := get_item(item_id)
 	if item == null:
 		return
@@ -369,20 +390,35 @@ func _server_pickup(item_id: int, peer_id: int) -> void:
 	_drag_targets.erase(item_id)
 	if is_net_active():
 		_rpc_despawn_item.rpc(item_id)
-		if peer_id == multiplayer.get_unique_id():
-			inventory_granted.emit(scene_path, icon_path)
+		if grant_to_slot:
+			if peer_id == multiplayer.get_unique_id():
+				inventory_granted.emit(scene_path, icon_path)
+			else:
+				_rpc_grant_inventory.rpc_id(peer_id, scene_path, icon_path)
 		else:
-			_rpc_grant_inventory.rpc_id(peer_id, scene_path, icon_path)
+			if peer_id == multiplayer.get_unique_id():
+				inventory_drag_ready.emit(scene_path, icon_path)
+			else:
+				_rpc_inventory_drag_ready.rpc_id(peer_id, scene_path, icon_path)
 		_broadcast_item_poses()
 	else:
 		_despawn_item(item_id)
-		inventory_granted.emit(scene_path, icon_path)
+		if grant_to_slot:
+			inventory_granted.emit(scene_path, icon_path)
+		else:
+			inventory_drag_ready.emit(scene_path, icon_path)
 
 @rpc("any_peer", "reliable")
 func _rpc_grant_inventory(scene_path: String, icon_path: String) -> void:
 	if multiplayer.get_remote_sender_id() != 1:
 		return
 	inventory_granted.emit(scene_path, icon_path)
+
+@rpc("any_peer", "reliable")
+func _rpc_inventory_drag_ready(scene_path: String, icon_path: String) -> void:
+	if multiplayer.get_remote_sender_id() != 1:
+		return
+	inventory_drag_ready.emit(scene_path, icon_path)
 
 func request_drop(scene_path: String, position: Vector3, grab_after: bool) -> void:
 	if not is_net_active():

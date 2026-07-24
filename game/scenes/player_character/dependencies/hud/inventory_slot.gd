@@ -12,68 +12,97 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	if is_dragging_this_slot:
+		if hud and hud._pause_suppressed:
+			return
 		if not hud.is_point_over_inventory_ui(get_global_mouse_position()):
 			# Mouse left the inventory! Spawn immediately.
 			hud._try_begin_inventory_slot_drag(slot_index)
-			
+
 			if is_instance_valid(drag_preview_ctrl):
 				drag_preview_ctrl.queue_free()
-			
+
 			# Invalidate the drag data so it can't be dropped back into a slot
 			current_drag_data["type"] = "cancelled"
-			
+
 			is_dragging_this_slot = false
 			set_process(false)
 
-func _get_drag_data(at_position: Vector2) -> Variant:
+func _get_drag_data(_at_position: Vector2) -> Variant:
+	return _begin_slot_drag(true)
+
+## Same drag as clicking a slot — used when converting a held world item into UI drag.
+func start_forced_drag() -> bool:
+	var data: Variant = _begin_slot_drag(false)
+	if data == null:
+		return false
+	force_drag(data, drag_preview_ctrl)
+	return true
+
+func _begin_slot_drag(use_set_preview: bool) -> Variant:
 	if hud == null or slot_index < 0:
 		return null
-	var path = hud._inventory_slot_scene_paths[slot_index]
+	if slot_index >= hud._inventory_slot_scene_paths.size():
+		return null
+	var path: String = hud._inventory_slot_scene_paths[slot_index]
 	if path == "":
 		return null
-	var tex = hud._inventory_slot_textures[slot_index]
-	
+	var tex: Texture2D = hud._inventory_slot_textures[slot_index]
+
 	is_dragging_this_slot = true
 	set_process(true)
-	
+
 	var preview := TextureRect.new()
-	preview.texture = tex
+	preview.texture = tex if tex else HUD.DEFAULT_INVENTORY_ICON
 	preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	preview.custom_minimum_size = size
 	preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	preview.modulate = Color(1, 1, 1, 0.7)
-	
+
 	drag_preview_ctrl = Control.new()
 	drag_preview_ctrl.add_child(preview)
 	preview.position = -0.5 * size
-	set_drag_preview(drag_preview_ctrl)
-	
-	current_drag_data = {"type": "inventory_slot", "slot_index": slot_index, "texture": tex, "scene_path": path}
+	if use_set_preview:
+		set_drag_preview(drag_preview_ctrl)
+
+	current_drag_data = {
+		"type": "inventory_slot",
+		"slot_index": slot_index,
+		"texture": tex,
+		"scene_path": path,
+	}
 	return current_drag_data
 
-func _can_drop_data(at_position: Vector2, data: Variant) -> bool:
+func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
 	if typeof(data) == TYPE_DICTIONARY and data.has("type") and data["type"] == "inventory_slot":
 		return true
 	return false
 
-func _drop_data(at_position: Vector2, data: Variant) -> void:
-	if typeof(data) == TYPE_DICTIONARY and data.has("type") and data["type"] == "inventory_slot":
-		var source_index: int = data["slot_index"]
-		var source_path: String = data["scene_path"]
-		var source_tex: Texture2D = data["texture"]
-		
-		if source_index != slot_index:
-			var my_path: String = hud._inventory_slot_scene_paths[slot_index]
-			var my_tex: Texture2D = hud._inventory_slot_textures[slot_index]
-			
-			hud._set_inventory_slot_content(slot_index, source_path, source_tex)
-			hud._set_inventory_slot_content(source_index, my_path, my_tex)
+func _drop_data(_at_position: Vector2, data: Variant) -> void:
+	if typeof(data) != TYPE_DICTIONARY or not data.has("type") or data["type"] != "inventory_slot":
+		return
+
+	var source_index: int = int(data["slot_index"])
+	var source_path: String = str(data["scene_path"])
+	var source_tex: Texture2D = data["texture"] as Texture2D
+
+	# Floating drag from the world — not in a slot until this drop.
+	if source_index < 0:
+		hud.place_floating_drag_in_slot(slot_index, source_path, source_tex)
+		return
+
+	if source_index != slot_index:
+		var my_path: String = hud._inventory_slot_scene_paths[slot_index]
+		var my_tex: Texture2D = hud._inventory_slot_textures[slot_index]
+		hud._set_inventory_slot_content(slot_index, source_path, source_tex)
+		hud._set_inventory_slot_content(source_index, my_path, my_tex)
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_DRAG_END:
 		if is_dragging_this_slot:
 			is_dragging_this_slot = false
 			set_process(false)
+			if hud and hud._pause_suppressed:
+				return
 			if not get_viewport().gui_is_drag_successful():
 				if not hud.is_point_over_inventory_ui(get_global_mouse_position()):
 					hud._try_begin_inventory_slot_drag(slot_index)

@@ -37,6 +37,8 @@ func _ready() -> void:
 		WorldNet.item_released.connect(_on_item_released)
 	if not WorldNet.inventory_granted.is_connected(_on_inventory_granted):
 		WorldNet.inventory_granted.connect(_on_inventory_granted)
+	if not WorldNet.inventory_drag_ready.is_connected(_on_inventory_drag_ready):
+		WorldNet.inventory_drag_ready.connect(_on_inventory_drag_ready)
 
 func _ensure_pickup_action() -> void:
 	if not InputMap.has_action(PICKUP_ACTION):
@@ -86,9 +88,7 @@ func _input(event: InputEvent) -> void:
 	if not _is_local_player():
 		return
 	if _gameplay_blocked():
-		if _grab_held or held_item != null:
-			_grab_held = false
-			_release_held()
+		force_release_now()
 		return
 	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT):
 		return
@@ -117,7 +117,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 
 func _physics_process(delta: float) -> void:
-	if not _is_local_player() or _gameplay_blocked():
+	if not _is_local_player():
+		return
+	# Don't wait for another input event — drop immediately when pause opens.
+	if _gameplay_blocked():
+		force_release_now()
 		return
 	if held_item == null or not is_instance_valid(held_item):
 		held_item = null
@@ -125,7 +129,133 @@ func _physics_process(delta: float) -> void:
 	if not _grab_held:
 		_release_held()
 		return
+	# Crossing into the open inventory converts to the same icon UI-drag as taking items out.
+	var hud := _hud()
+	if hud and hud.inventory_open and hud.is_point_over_inventory_ui(_drag_cursor_vp()):
+		_try_convert_held_to_inventory_ui_drag()
+		return
 	_drag_on_depth_plane(delta)
+
+## Soft drop used when pausing — no throw impulse.
+func force_release_now() -> void:
+	if held_item == null and not _grab_held:
+		return
+	_grab_held = false
+	_throw_velocity = Vector3.ZERO
+	if held_item == null or not is_instance_valid(held_item):
+		held_item = null
+		_grab_depth = 0.0
+		_grab_offset = Vector3.ZERO
+		_pending_grab_id = 0
+		return
+	var item := held_item
+	var item_id := item.item_id
+	held_item = null
+	_grab_depth = 0.0
+	_grab_offset = Vector3.ZERO
+	_throw_velocity = Vector3.ZERO
+	_pending_grab_id = 0
+	if _uses_world_net():
+		WorldNet.request_release(item_id, Vector3.ZERO)
+	else:
+		item.set_held(self, false, Vector3.ZERO)
+
+func _release_held() -> void:
+	if held_item == null or not is_instance_valid(held_item):
+		held_item = null
+		_grab_depth = 0.0
+		_grab_offset = Vector3.ZERO
+		_throw_velocity = Vector3.ZERO
+		_pending_grab_id = 0
+		return
+
+	# Fallback: released over inventory without a UI-drag convert (e.g. inventory full earlier).
+	var hud := _hud()
+	var mouse := _drag_cursor_vp()
+	if hud and hud.is_point_over_inventory_ui(mouse):
+		if _stow_held_to_inventory(mouse):
+			return
+
+	var item := held_item
+	var release_vel := _throw_velocity
+	if release_vel.length() < item.linear_velocity.length():
+		release_vel = item.linear_velocity
+	release_vel *= throw_velocity_scale
+	if release_vel.length() > throw_max_speed:
+		release_vel = release_vel.normalized() * throw_max_speed
+	var item_id := item.item_id
+	held_item = null
+	_grab_depth = 0.0
+	_grab_offset = Vector3.ZERO
+	_throw_velocity = Vector3.ZERO
+	_pending_grab_id = 0
+	if _uses_world_net():
+		WorldNet.request_release(item_id, release_vel)
+	else:
+		item.set_held(self, false, release_vel)
+
+## World hold → floating inventory UI drag (icon preview; no slot until drop).
+func _try_convert_held_to_inventory_ui_drag() -> bool:
+	var hud := _hud()
+	if hud == null or held_item == null or not is_instance_valid(held_item):
+		return false
+	if not hud.has_free_inventory_slot():
+		return false
+
+	var item := held_item
+
+	if _uses_world_net():
+		var item_id := item.item_id
+		held_item = null
+		_grab_held = false
+		_grab_depth = 0.0
+		_grab_offset = Vector3.ZERO
+		_throw_velocity = Vector3.ZERO
+		_pending_grab_id = 0
+		WorldNet.request_inventory_drag_consume(item_id)
+		return true
+
+	var scene_path := item.get_spawn_scene_path()
+	if scene_path == "":
+		scene_path = item.scene_file_path
+	var icon_tex: Texture2D = item.inventory_icon if item.inventory_icon else null
+	held_item = null
+	_grab_held = false
+	_grab_depth = 0.0
+	_grab_offset = Vector3.ZERO
+	_throw_velocity = Vector3.ZERO
+	_pending_grab_id = 0
+	item.queue_free()
+	return hud.begin_floating_inventory_drag(scene_path, icon_tex)
+
+## Drop a held world item into the inventory without starting UI drag.
+func _stow_held_to_inventory(point: Vector2) -> bool:
+	var hud := _hud()
+	if hud == null or held_item == null or not is_instance_valid(held_item):
+		return false
+
+	if _uses_world_net():
+		var item_id := held_item.item_id
+		held_item = null
+		_grab_held = false
+		_grab_depth = 0.0
+		_grab_offset = Vector3.ZERO
+		_throw_velocity = Vector3.ZERO
+		_pending_grab_id = 0
+		WorldNet.request_pickup(item_id)
+		return true
+
+	var item := held_item
+	if not hud.try_add_holdable_item_at_point(item, point):
+		return false
+	held_item = null
+	_grab_held = false
+	_grab_depth = 0.0
+	_grab_offset = Vector3.ZERO
+	_throw_velocity = Vector3.ZERO
+	_pending_grab_id = 0
+	item.queue_free()
+	return true
 
 func _drag_cursor_vp() -> Vector2:
 	if _look_busy() and _player and _player.cam_holder:
@@ -160,6 +290,13 @@ func _on_inventory_granted(scene_path: String, icon_path: String) -> void:
 	var hud := _hud()
 	if hud:
 		hud.add_inventory_item_from_net(scene_path, icon_path)
+
+func _on_inventory_drag_ready(scene_path: String, icon_path: String) -> void:
+	if not _is_local_player():
+		return
+	var hud := _hud()
+	if hud:
+		hud.begin_floating_drag_from_net(scene_path, icon_path)
 
 func _ensure_grab_depth_for(item: HoldableItem) -> void:
 	var cam := _camera()
@@ -270,32 +407,6 @@ func begin_net_inventory_drag(scene_path: String) -> void:
 	_throw_velocity = Vector3.ZERO
 	_grab_held = true
 	WorldNet.request_drop(scene_path, target, true)
-
-func _release_held() -> void:
-	if held_item == null or not is_instance_valid(held_item):
-		held_item = null
-		_grab_depth = 0.0
-		_grab_offset = Vector3.ZERO
-		_throw_velocity = Vector3.ZERO
-		_pending_grab_id = 0
-		return
-	var item := held_item
-	var release_vel := _throw_velocity
-	if release_vel.length() < item.linear_velocity.length():
-		release_vel = item.linear_velocity
-	release_vel *= throw_velocity_scale
-	if release_vel.length() > throw_max_speed:
-		release_vel = release_vel.normalized() * throw_max_speed
-	var item_id := item.item_id
-	held_item = null
-	_grab_depth = 0.0
-	_grab_offset = Vector3.ZERO
-	_throw_velocity = Vector3.ZERO
-	_pending_grab_id = 0
-	if _uses_world_net():
-		WorldNet.request_release(item_id, release_vel)
-	else:
-		item.set_held(self, false, release_vel)
 
 func _drag_on_depth_plane(delta: float) -> void:
 	var cam := _camera()

@@ -4,23 +4,24 @@ class_name ToolHotbar
 signal selection_changed(index: int, tool: ToolDefinition)
 
 const SLOT_COUNT: int = 9
-const SLOT_SIZE: float = 64.0
-const SELECTED_SCALE: float = 1.1
+const CARD_WIDTH: float = 96.0
+const ICON_SIZE: float = 64.0
+const SELECTED_SCALE: float = 1.08
 const DEFAULT_ICON: Texture2D = preload("res://icon.png")
+const VIBRANCY_MATERIAL: ShaderMaterial = preload("res://common/shaders/vibrancy_backdrop.tres")
 
 @export var hud: HUD
 
 var selected_index: int = 0
 var _tools: Array[ToolDefinition] = []
-var _slots: Array[PanelContainer] = []
+var _cards: Array[PanelContainer] = []
 var _icons: Array[TextureRect] = []
 var _key_labels: Array[Label] = []
-var _slot_style: StyleBoxFlat
+var _name_labels: Array[Label] = []
+var _card_style: StyleBoxFlat
 var _selected_style: StyleBoxFlat
-var _panel: PanelContainer
 var _slots_row: HBoxContainer
 var _select_tween: Tween
-var _name_label: Label
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -70,9 +71,12 @@ func cycle(delta: int) -> void:
 	select_index(wrapi(selected_index + delta, 0, SLOT_COUNT))
 
 func is_point_over(point: Vector2) -> bool:
-	if not visible or _panel == null:
+	if not visible:
 		return false
-	return _panel.get_global_rect().has_point(point)
+	for card in _cards:
+		if card.get_global_rect().has_point(point):
+			return true
+	return false
 
 func _unhandled_input(event: InputEvent) -> void:
 	if hud and not hud.is_local_hud():
@@ -125,73 +129,57 @@ func _slot_action(index: int) -> StringName:
 	return StringName("hotbar_%d" % (index + 1))
 
 func _build_styles() -> void:
-	_slot_style = StyleBoxFlat.new()
-	_slot_style.bg_color = Color(0.09, 0.10, 0.12, 0.96)
-	_slot_style.border_color = Color(0.28, 0.31, 0.35, 1.0)
-	_slot_style.set_border_width_all(2)
-	_slot_style.set_corner_radius_all(8)
-	_slot_style.set_content_margin_all(6)
+	_card_style = StyleBoxFlat.new()
+	_card_style.bg_color = Color(0.1, 0.1, 0.11, 0.42)
+	_card_style.border_color = Color(1, 1, 1, 0.18)
+	_card_style.set_border_width_all(1)
+	_card_style.set_corner_radius_all(14)
+	_card_style.set_content_margin_all(10)
 
-	_selected_style = _slot_style.duplicate()
-	_selected_style.bg_color = Color(0.16, 0.12, 0.22, 0.98)
-	_selected_style.border_color = Color(0.72, 0.58, 0.92, 1.0)
-	_selected_style.set_border_width_all(3)
-	_selected_style.shadow_color = Color(0.45, 0.28, 0.7, 0.45)
+	_selected_style = _card_style.duplicate()
+	_selected_style.bg_color = Color(0.18, 0.18, 0.2, 0.55)
+	_selected_style.border_color = Color(1, 1, 1, 0.92)
+	_selected_style.set_border_width_all(2)
+	_selected_style.shadow_color = Color(0, 0, 0, 0.4)
 	_selected_style.shadow_size = 8
 
+func _make_vibrancy_material() -> ShaderMaterial:
+	return VIBRANCY_MATERIAL.duplicate() as ShaderMaterial
+
 func _build_ui() -> void:
-	_panel = PanelContainer.new()
-	_panel.name = "HotbarPanel"
-	_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.24, 0.18, 0.31, 0.88)
-	panel_style.set_corner_radius_all(12)
-	panel_style.set_content_margin_all(10)
-	panel_style.shadow_color = Color(0, 0, 0, 0.35)
-	panel_style.shadow_size = 10
-	panel_style.shadow_offset = Vector2(0, 4)
-	_panel.add_theme_stylebox_override("panel", panel_style)
-	add_child(_panel)
-
-	var vbox := VBoxContainer.new()
-	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vbox.add_theme_constant_override("separation", 6)
-	_panel.add_child(vbox)
-
-	_name_label = Label.new()
-	_name_label.name = "SelectedToolName"
-	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_name_label.add_theme_font_size_override("font_size", 16)
-	_name_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	_name_label.add_theme_constant_override("outline_size", 3)
-	_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vbox.add_child(_name_label)
-
 	_slots_row = HBoxContainer.new()
 	_slots_row.name = "SlotsRow"
 	_slots_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	_slots_row.add_theme_constant_override("separation", 8)
+	_slots_row.add_theme_constant_override("separation", 12)
 	_slots_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vbox.add_child(_slots_row)
+	add_child(_slots_row)
 
-	_slots.clear()
+	_cards.clear()
 	_icons.clear()
 	_key_labels.clear()
-	for i in SLOT_COUNT:
-		var slot := PanelContainer.new()
-		slot.name = "ToolSlot_%d" % (i + 1)
-		slot.custom_minimum_size = Vector2(SLOT_SIZE, SLOT_SIZE)
-		slot.mouse_filter = Control.MOUSE_FILTER_STOP
-		slot.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		slot.add_theme_stylebox_override("panel", _slot_style)
-		slot.pivot_offset = Vector2(SLOT_SIZE * 0.5, SLOT_SIZE * 0.5)
-		slot.gui_input.connect(_on_slot_gui_input.bind(i))
-		_slots_row.add_child(slot)
+	_name_labels.clear()
 
-		var stack := Control.new()
-		stack.custom_minimum_size = Vector2(SLOT_SIZE - 12.0, SLOT_SIZE - 12.0)
-		stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		slot.add_child(stack)
+	for i in SLOT_COUNT:
+		var card := PanelContainer.new()
+		card.name = "ToolCard_%d" % (i + 1)
+		card.custom_minimum_size = Vector2(CARD_WIDTH, 0.0)
+		card.mouse_filter = Control.MOUSE_FILTER_STOP
+		card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		card.add_theme_stylebox_override("panel", _card_style)
+		card.material = _make_vibrancy_material()
+		card.gui_input.connect(_on_slot_gui_input.bind(i))
+		_slots_row.add_child(card)
+
+		var vbox := VBoxContainer.new()
+		vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		vbox.add_theme_constant_override("separation", 4)
+		card.add_child(vbox)
+
+		var icon_wrap := Control.new()
+		icon_wrap.custom_minimum_size = Vector2(ICON_SIZE, ICON_SIZE)
+		icon_wrap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		icon_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		vbox.add_child(icon_wrap)
 
 		var icon := TextureRect.new()
 		icon.name = "Icon"
@@ -199,22 +187,40 @@ func _build_ui() -> void:
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		stack.add_child(icon)
+		icon_wrap.add_child(icon)
 
 		var key_label := Label.new()
 		key_label.name = "KeyLabel"
 		key_label.text = str(i + 1)
 		key_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
-		key_label.position = Vector2(4, 2)
-		key_label.add_theme_font_size_override("font_size", 12)
+		key_label.position = Vector2(0, -2)
+		key_label.add_theme_font_size_override("font_size", 13)
 		key_label.add_theme_color_override("font_outline_color", Color.BLACK)
 		key_label.add_theme_constant_override("outline_size", 3)
 		key_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		stack.add_child(key_label)
+		icon_wrap.add_child(key_label)
 
-		_slots.append(slot)
+		var name_label := Label.new()
+		name_label.name = "NameLabel"
+		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+		name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		name_label.custom_minimum_size = Vector2(CARD_WIDTH - 16.0, 0.0)
+		name_label.add_theme_font_size_override("font_size", 14)
+		name_label.add_theme_color_override("font_outline_color", Color.BLACK)
+		name_label.add_theme_constant_override("outline_size", 3)
+		name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		vbox.add_child(name_label)
+
+		# Pivot after layout; updated in refresh.
+		card.resized.connect(_update_card_pivot.bind(card))
+		_cards.append(card)
 		_icons.append(icon)
 		_key_labels.append(key_label)
+		_name_labels.append(name_label)
+
+func _update_card_pivot(card: Control) -> void:
+	card.pivot_offset = card.size * 0.5
 
 func _seed_placeholder_loadout() -> void:
 	_tools.clear()
@@ -235,7 +241,6 @@ func _make_tool(id: StringName, tool_name: String, icon: Texture2D) -> ToolDefin
 func _refresh_all_slots() -> void:
 	for i in SLOT_COUNT:
 		_refresh_slot(i)
-	_update_name_label()
 
 func _refresh_slot(index: int) -> void:
 	if index < 0 or index >= _icons.size():
@@ -251,50 +256,50 @@ func _refresh_slot(index: int) -> void:
 		_icons[index].texture = null
 		_icons[index].modulate = Color(1, 1, 1, 0.35)
 
+	if index < _name_labels.size():
+		_name_labels[index].text = def.display_name if def else "Empty"
+
 func _apply_selection_visuals(animate: bool) -> void:
-	for i in _slots.size():
+	for i in _cards.size():
 		var selected := i == selected_index
-		_slots[i].add_theme_stylebox_override("panel", _selected_style if selected else _slot_style)
+		_cards[i].add_theme_stylebox_override("panel", _selected_style if selected else _card_style)
+		_update_card_pivot(_cards[i])
 		if selected:
 			if animate:
-				_slots[i].scale = Vector2.ONE * 0.92
+				_cards[i].scale = Vector2.ONE * 0.94
 				if _select_tween and _select_tween.is_valid():
 					_select_tween.kill()
 				_select_tween = create_tween()
 				_select_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-				_select_tween.tween_property(_slots[i], "scale", Vector2.ONE * SELECTED_SCALE, 0.18)
+				_select_tween.tween_property(_cards[i], "scale", Vector2.ONE * SELECTED_SCALE, 0.18)
 			else:
-				_slots[i].scale = Vector2.ONE * SELECTED_SCALE
+				_cards[i].scale = Vector2.ONE * SELECTED_SCALE
 		else:
-			_slots[i].scale = Vector2.ONE
-	_update_name_label()
+			_cards[i].scale = Vector2.ONE
 
 func _punch_selected() -> void:
-	if selected_index < 0 or selected_index >= _slots.size():
+	if selected_index < 0 or selected_index >= _cards.size():
 		return
-	var slot := _slots[selected_index]
+	var card := _cards[selected_index]
 	if _select_tween and _select_tween.is_valid():
 		_select_tween.kill()
 	_select_tween = create_tween()
-	_select_tween.tween_property(slot, "scale", Vector2.ONE * (SELECTED_SCALE * 1.08), 0.06)
-	_select_tween.tween_property(slot, "scale", Vector2.ONE * SELECTED_SCALE, 0.1).set_trans(Tween.TRANS_SINE)
-
-func _update_name_label() -> void:
-	if _name_label == null:
-		return
-	var def := get_selected_tool()
-	_name_label.text = def.display_name if def else ""
+	_select_tween.tween_property(card, "scale", Vector2.ONE * (SELECTED_SCALE * 1.06), 0.06)
+	_select_tween.tween_property(card, "scale", Vector2.ONE * SELECTED_SCALE, 0.1).set_trans(Tween.TRANS_SINE)
 
 func _refresh_layout() -> void:
-	if _panel == null:
+	if _slots_row == null:
 		return
 	var viewport_size := get_viewport().get_visible_rect().size
-	var panel_size := _panel.get_combined_minimum_size()
-	_panel.size = panel_size
-	_panel.position = Vector2(
-		(viewport_size.x - panel_size.x) * 0.5,
-		viewport_size.y - panel_size.y - 18.0
+	_slots_row.reset_size()
+	var row_size := _slots_row.get_combined_minimum_size()
+	_slots_row.size = row_size
+	_slots_row.position = Vector2(
+		(viewport_size.x - row_size.x) * 0.5,
+		viewport_size.y - row_size.y - 16.0
 	)
+	for card in _cards:
+		_update_card_pivot(card)
 
 func _on_slot_gui_input(event: InputEvent, index: int) -> void:
 	if hud and hud.play_char and hud.play_char.is_gameplay_blocked():

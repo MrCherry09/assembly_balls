@@ -1,0 +1,7 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://common/shaders/vibrancy_backdrop.gdshader" id="1_vibrancy"]
+
+[resource]
+shader = ExtResource("1_vibrancy")
+shader_parameter/blur_lod = 3.0
