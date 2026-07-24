@@ -1,6 +1,6 @@
-[gd_resource type="ShaderMaterial" format=3]
+[gd_resource type="ShaderMaterial" format=3 uid="uid://d1e0xude38gqx"]
 
-[ext_resource type="Shader" path="res://common/shaders/vibrancy_backdrop.gdshader" id="1_vibrancy"]
+[ext_resource type="Shader" uid="uid://b8i7btfe15x6l" path="res://common/shaders/vibrancy_backdrop.gdshader" id="1_vibrancy"]
 
 [resource]
 shader = ExtResource("1_vibrancy")

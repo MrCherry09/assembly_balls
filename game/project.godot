@@ -28,8 +28,10 @@ buses/default_bus_layout=""
 
 [autoload]
 
+GameInput="*res://scripts/globals/GameInput.gd"
 Online="*uid://c8kw5ggqk6vdo"
 WorldNet="*res://scripts/globals/WorldNet.gd"
+AppConfig="*res://addons/maaacks_menus_template/base/nodes/autoloads/app_config/app_config.tscn"
 
 [display]
 

@@ -5,5 +5,10 @@
 [resource]
 render_priority = 10
 shader = ExtResource("1_outline")
-shader_parameter/outline_color = Color(1, 0.85, 0.15, 1)
-shader_parameter/outline_width = 3.5
+shader_parameter/line_color = Color(1, 1, 1, 1)
+shader_parameter/glowSize = 15.0
+shader_parameter/glowDensity = 3
+shader_parameter/glowRadialCoverage = 4
+shader_parameter/glowAngle = 1.57
+shader_parameter/glowSharpness = 1.0
+shader_parameter/alphaThreshold = 0.2

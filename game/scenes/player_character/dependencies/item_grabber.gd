@@ -5,6 +5,7 @@ class_name ItemGrabber
 ## In multiplayer, grab/drag/release go through WorldNet (host-authoritative).
 
 const PICKUP_ACTION: StringName = &"pickup_holdable_item"
+const ATTACK_ACTION: StringName = &"play_char_attack_action"
 
 @export var grab_range: float = 8.0
 @export var hold_follow_speed: float = 12.0
@@ -90,11 +91,16 @@ func _input(event: InputEvent) -> void:
 	if _gameplay_blocked():
 		force_release_now()
 		return
-	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT):
+	var attack_pressed := event.is_action_pressed(ATTACK_ACTION)
+	var attack_released := event.is_action_released(ATTACK_ACTION)
+	if not attack_pressed and not attack_released:
 		return
-	if event.pressed:
+	if attack_pressed:
 		var hud := _hud()
-		if hud and hud.is_point_over_hud_ui(event.position):
+		var cursor_pos := get_viewport().get_mouse_position()
+		if event is InputEventMouse:
+			cursor_pos = (event as InputEventMouse).position
+		if hud and hud.is_point_over_hud_ui(cursor_pos):
 			return
 		if _look_busy():
 			if held_item == null and _player.has_method("attack"):

@@ -28,6 +28,7 @@ const PITCH_LIMIT_DEG := 89.0
 ## Multiplier on look sensitivity while aiming.
 @export_range(0.2, 1.0, 0.01) var aim_look_sensitivity_scale: float = 0.72
 @export var aim_action: StringName = &"play_char_aim_action"
+@export var look_action: StringName = &"play_char_look_action"
 var is_aiming: bool = false
 var _default_shoulder_offset: float = 0.0
 var _default_camera_distance: float = 0.0
@@ -217,12 +218,15 @@ func _unhandled_input(event) -> void:
 		return
 	if event is InputEventMouseMotion:
 		_handle_mouse_motion(event)
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
-		if event.pressed and not _mouse_captured:
-			# event.position is already viewport-space (stretch-safe with Viewport.warp_mouse).
-			_stored_cursor_vp = event.position
+	elif event.is_action_pressed(look_action) or event.is_action_released(look_action):
+		if event.is_action_pressed(look_action) and not _mouse_captured:
+			# Prefer event position for mouse; fall back to current cursor for remapped keys.
+			if event is InputEventMouse:
+				_stored_cursor_vp = (event as InputEventMouse).position
+			else:
+				_stored_cursor_vp = get_viewport().get_mouse_position()
 			_has_stored_cursor = true
-		_set_orbiting(event.pressed)
+		_set_orbiting(event.is_action_pressed(look_action))
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("ui_cancel"):
 		_set_orbiting(false)

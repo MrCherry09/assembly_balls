@@ -10,6 +10,11 @@ class_name Lobby
 @onready var main_menu: MainMenuUI = %MainMenuUI
 @onready var steam_friends_list: Panel = %SteamFriendsList
 @onready var in_game_ui: Control = %InGameUI
+@onready var pause_backdrop: Panel = %PauseBackdrop
+@onready var pause_root: Control = %MarginContainer
+@onready var pause_options_menu: PauseOptionsMenu = %PauseOptionsMenu
+
+const VIBRANCY_MATERIAL: ShaderMaterial = preload("res://common/shaders/vibrancy_backdrop.tres")
 
 ## Snapshot of starter items + trees taken before the first match mutates the world.
 var _pristine_item_spawns: Array[Dictionary] = []
@@ -25,6 +30,7 @@ func _setup_multiplayer_spawner() -> void:
 	multiplayer_spawner.add_spawnable_scene(player_scene.resource_path)
 
 func _ready() -> void:
+	_apply_pause_vibrancy()
 	_cache_pristine_world()
 	_update_lobby_info_button()
 	_setup_multiplayer_spawner()
@@ -42,6 +48,18 @@ func _ready() -> void:
 	Online.player_connected.connect(_on_player_connected)
 	Online.player_disconnected.connect(_on_player_disconnected)
 	toggle_ui(true)
+
+
+func _apply_pause_vibrancy() -> void:
+	if pause_backdrop == null:
+		return
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.1, 0.1, 0.11, 0.45)
+	style.border_color = Color(1, 1, 1, 0)
+	style.set_border_width_all(0)
+	style.set_corner_radius_all(0)
+	pause_backdrop.add_theme_stylebox_override("panel", style)
+	pause_backdrop.material = VIBRANCY_MATERIAL.duplicate()
 
 func _cache_pristine_world() -> void:
 	# Don't PackedScene.pack(Items): authored children own the lobby root, so pack drops them.
@@ -180,14 +198,33 @@ func is_gameplay_blocked() -> bool:
 func _set_pause_menu_open(open: bool) -> void:
 	if open:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		_show_pause_root()
 		if Online.steam_lobby_id:
 			steam_friends_list.show()
 		else:
 			steam_friends_list.hide()
 		in_game_ui.show()
 	else:
+		if pause_options_menu.visible:
+			pause_options_menu.hide()
 		in_game_ui.hide()
 		steam_friends_list.hide()
+
+
+func _show_pause_root() -> void:
+	if pause_options_menu.visible:
+		pause_options_menu.hide()
+	pause_root.show()
+	if Online.steam_lobby_id:
+		steam_friends_list.show()
+	else:
+		steam_friends_list.hide()
+
+
+func _show_pause_options() -> void:
+	pause_root.hide()
+	steam_friends_list.hide()
+	pause_options_menu.open()
 
 func _update_lobby_info_button() -> void:
 	lobby_info_button.text = "IP/Lobby ID: \n\n%s" % _current_lobby
@@ -293,6 +330,12 @@ func _input(event: InputEvent) -> void:
 	if Input.is_action_just_pressed("ui_cancel"):
 		if main_menu.visible:
 			return
+		if in_game_ui.visible and pause_options_menu.visible:
+			if pause_options_menu.has_blocking_overlay():
+				return
+			_show_pause_root()
+			get_viewport().set_input_as_handled()
+			return
 		_set_pause_menu_open(not in_game_ui.visible)
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("toggle_fullscreen"):
@@ -301,6 +344,16 @@ func _input(event: InputEvent) -> void:
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 		else:
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+
+func _on_resume_button_pressed() -> void:
+	_set_pause_menu_open(false)
+
+func _on_options_button_pressed() -> void:
+	_show_pause_options()
+
+func _on_pause_options_closed() -> void:
+	if in_game_ui.visible:
+		_show_pause_root()
 
 func _on_exit_lobby_button_pressed() -> void:
 	Online.leave_lobby()
