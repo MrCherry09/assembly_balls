@@ -11,6 +11,11 @@ class_name Lobby
 @onready var steam_friends_list: Panel = %SteamFriendsList
 @onready var in_game_ui: Control = %InGameUI
 
+## Snapshot of starter items + trees taken before the first match mutates the world.
+var _pristine_item_spawns: Array[Dictionary] = []
+var _pristine_trees: Array[Dictionary] = []
+var _world_resetting: bool = false
+
 var _current_lobby: String:
 	get: return Online.LOCAL_SERVER_ADDRESS if not Online.steam_lobby_id else str(Online.steam_lobby_id)
 
@@ -18,8 +23,9 @@ func _setup_multiplayer_spawner() -> void:
 	multiplayer_spawner.spawn_function = _add_player
 	multiplayer_spawner.spawn_path = players_container.get_path()
 	multiplayer_spawner.add_spawnable_scene(player_scene.resource_path)
-	
+
 func _ready() -> void:
+	_cache_pristine_world()
 	_update_lobby_info_button()
 	_setup_multiplayer_spawner()
 	_setup_world_net.call_deferred()
@@ -37,10 +43,126 @@ func _ready() -> void:
 	Online.player_disconnected.connect(_on_player_disconnected)
 	toggle_ui(true)
 
+func _cache_pristine_world() -> void:
+	# Don't PackedScene.pack(Items): authored children own the lobby root, so pack drops them.
+	_pristine_item_spawns.clear()
+	var items := get_node_or_null("World3D/Items") as Node3D
+	if items:
+		for child in items.get_children():
+			var holdable := child as HoldableItem
+			if holdable == null:
+				continue
+			var scene_path := holdable.get_spawn_scene_path()
+			if scene_path == "":
+				scene_path = holdable.scene_file_path
+			if scene_path == "":
+				continue
+			_pristine_item_spawns.append({
+				"scene_path": scene_path,
+				"transform": holdable.transform,
+				"name": holdable.name,
+			})
+
+	_pristine_trees.clear()
+	for node in get_tree().get_nodes_in_group("network_trees"):
+		if node == null or not is_instance_valid(node):
+			continue
+		var scene_path := node.scene_file_path
+		if scene_path == "":
+			# Fallback: pack the node itself (works when the tree is the pack root).
+			var packed := PackedScene.new()
+			if packed.pack(node) != OK:
+				continue
+			var parent := node.get_parent()
+			if parent == null:
+				continue
+			_pristine_trees.append({
+				"packed": packed,
+				"scene_path": "",
+				"parent_path": str(get_path_to(parent)),
+				"index": node.get_index(),
+				"transform": node.transform,
+			})
+			continue
+		var parent := node.get_parent()
+		if parent == null:
+			continue
+		_pristine_trees.append({
+			"packed": null,
+			"scene_path": scene_path,
+			"parent_path": str(get_path_to(parent)),
+			"index": node.get_index(),
+			"transform": node.transform,
+		})
+
 func _setup_world_net() -> void:
 	var items := get_node_or_null("World3D/Items") as Node3D
 	if items:
 		WorldNet.setup(items)
+
+## Restores starter items/trees and clears WorldNet so the next lobby is a fresh match.
+func reset_match_world() -> void:
+	if _world_resetting:
+		return
+	_world_resetting = true
+
+	WorldNet.reset_session()
+
+	var items := get_node_or_null("World3D/Items") as Node3D
+	if items:
+		for child in items.get_children():
+			items.remove_child(child)
+			child.free()
+		for entry in _pristine_item_spawns:
+			var scene_path: String = entry.get("scene_path", "")
+			if scene_path == "":
+				continue
+			var packed := load(scene_path) as PackedScene
+			if packed == null:
+				push_warning("Lobby reset: missing item scene %s" % scene_path)
+				continue
+			var item := packed.instantiate() as Node3D
+			if item == null:
+				continue
+			item.name = str(entry.get("name", item.name))
+			items.add_child(item)
+			item.transform = entry.get("transform", Transform3D.IDENTITY)
+			if item is HoldableItem:
+				(item as HoldableItem).item_id = 0
+				(item as HoldableItem).set_spawn_scene_path(scene_path)
+
+	# Remove every tree (chopped, damaged, or still standing).
+	var live_trees: Array = get_tree().get_nodes_in_group("network_trees")
+	for node in live_trees:
+		if is_instance_valid(node):
+			node.free()
+
+	for entry in _pristine_trees:
+		var parent := get_node_or_null(NodePath(entry.get("parent_path", "."))) as Node
+		if parent == null:
+			parent = self
+		var tree: Node3D = null
+		var scene_path: String = entry.get("scene_path", "")
+		if scene_path != "":
+			var packed_scene := load(scene_path) as PackedScene
+			if packed_scene:
+				tree = packed_scene.instantiate() as Node3D
+		elif entry.get("packed") is PackedScene:
+			tree = (entry.get("packed") as PackedScene).instantiate() as Node3D
+		if tree == null:
+			continue
+		parent.add_child(tree)
+		var idx: int = int(entry.get("index", parent.get_child_count() - 1))
+		parent.move_child(tree, mini(idx, parent.get_child_count() - 1))
+		tree.transform = entry.get("transform", Transform3D.IDENTITY)
+		if tree is TreePlaceholder:
+			(tree as TreePlaceholder).tree_id = 0
+
+	var items_node := get_node_or_null("World3D/Items") as Node3D
+	if items_node:
+		WorldNet.setup(items_node)
+
+	_world_resetting = false
 
 func toggle_ui(should_show_menu: bool, is_loading: bool = false) -> void:
 	if should_show_menu:
@@ -67,24 +189,35 @@ func _set_pause_menu_open(open: bool) -> void:
 		in_game_ui.hide()
 		steam_friends_list.hide()
 
-func _update_lobby_info_button() -> void: lobby_info_button.text = "IP/Lobby ID: \n\n%s" % _current_lobby
+func _update_lobby_info_button() -> void:
+	lobby_info_button.text = "IP/Lobby ID: \n\n%s" % _current_lobby
 
-func _handle_failed_connection() -> void: _on_disconnected.call_deferred()
+func _handle_failed_connection() -> void:
+	_on_disconnected.call_deferred()
 
 func _on_disconnected() -> void:
 	_update_lobby_info_button.call_deferred()
-	for child in players_container.get_children(): if not child is MultiplayerSpawner: child.queue_free()
+	for child in players_container.get_children():
+		if not child is MultiplayerSpawner:
+			child.queue_free()
+	reset_match_world()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	toggle_ui(true)
 
 func _on_player_connected(player_data: PlayerData) -> void:
 	_update_lobby_info_button()
-	if not multiplayer.is_server(): return
+	if not multiplayer.is_server():
+		return
 	multiplayer_spawner.spawn(player_data.to_dict())
-	
+
 func _on_player_disconnected(player_data: PlayerData) -> void:
 	var player_node: Node = players_container.get(str(player_data.multiplayer_id))
-	if is_instance_valid(player_node): player_node.queue_free()
+	if is_instance_valid(player_node):
+		player_node.queue_free()
+
+func _begin_match_network() -> void:
+	## World should already be pristine from leave; refresh authority for the new peer.
+	WorldNet.refresh_network()
 
 func _on_host_local_requested() -> void:
 	toggle_ui(true, true)
@@ -94,7 +227,7 @@ func _on_host_local_requested() -> void:
 			steam_friends_list.hide()
 			toggle_ui(false)
 			_update_lobby_info_button.call_deferred()
-			WorldNet.refresh_network()
+			_begin_match_network()
 		_:
 			steam_friends_list.show()
 			toggle_ui(true)
@@ -107,21 +240,24 @@ func _on_host_online_requested() -> void:
 		Online.ErrorCodes.SUCCESS:
 			_update_lobby_info_button.call_deferred()
 			toggle_ui(false)
-			WorldNet.refresh_network()
+			_begin_match_network()
 		_:
 			toggle_ui(true)
 
 func _on_join_requested(address: String) -> void:
-	if not address: address = Online.LOCAL_SERVER_ADDRESS
+	if not address:
+		address = Online.LOCAL_SERVER_ADDRESS
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	toggle_ui(true, true)
 	var error: Online.ErrorCodes
-	if address == Online.LOCAL_SERVER_ADDRESS: error = await Online.join_local_lobby()
-	else: error = await Online.join_steam_lobby(address as int)
+	if address == Online.LOCAL_SERVER_ADDRESS:
+		error = await Online.join_local_lobby()
+	else:
+		error = await Online.join_steam_lobby(address as int)
 	match error:
 		Online.ErrorCodes.SUCCESS:
 			toggle_ui(false)
-			WorldNet.refresh_network()
+			_begin_match_network()
 		_:
 			toggle_ui(true)
 
@@ -129,12 +265,13 @@ func _add_player(player_data_dict: Dictionary) -> Node:
 	toggle_ui(false, main_menu.loading)
 	var player_data := PlayerData.from_dict(player_data_dict)
 	var id: int = player_data.multiplayer_id
-	if players_container.has_node(str(id)): return
+	if players_container.has_node(str(id)):
+		return
 	var player: PlayerCharacter = player_scene.instantiate()
 	player.name = str(id)
 	player.position = get_spawn_point()
 	player.reset_physics_interpolation()
-	PlayerData.apply_data_to_node(player_data,player)
+	PlayerData.apply_data_to_node(player_data, player)
 	return player
 
 func get_spawn_point() -> Vector3:
@@ -160,10 +297,13 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("toggle_fullscreen"):
 		var current_mode = DisplayServer.window_get_mode()
-		if current_mode == DisplayServer.WINDOW_MODE_WINDOWED: DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
-		else: DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
-	
-func _on_exit_lobby_button_pressed() -> void: Online.leave_lobby()
+		if current_mode == DisplayServer.WINDOW_MODE_WINDOWED:
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		else:
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+
+func _on_exit_lobby_button_pressed() -> void:
+	Online.leave_lobby()
 
 func _on_lobby_info_button_pressed() -> void:
 	DisplayServer.clipboard_set(_current_lobby)

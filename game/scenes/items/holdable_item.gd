@@ -6,7 +6,6 @@ class_name HoldableItem
 ## Camera stays on mask 1 so props never block the third-person camera.
 
 @export var mesh_instance: MeshInstance3D
-@export var outline_material: Material = preload("res://common/shaders/outline_simple.tres")
 @export var mass_kg: float = 18.0
 ## Heavier fall than default project gravity so thrown props drop quickly.
 @export var free_gravity_scale: float = 2.4
@@ -28,6 +27,9 @@ class_name HoldableItem
 
 const LAYER_WORLD := 1
 const LAYER_HOLDABLE := 4
+## Visual render layer for the fake-stencil outline SubViewport (must match OutlineStencilOverlay).
+const OUTLINE_VISUAL_LAYER := 6
+const OUTLINE_LAYER_BIT := 1 << (OUTLINE_VISUAL_LAYER - 1)
 
 var is_held: bool = false
 var holder_peer_id: int = 0
@@ -75,14 +77,13 @@ func _find_first_mesh(node: Node) -> MeshInstance3D:
 
 func _set_outline_visible(visible_outline: bool) -> void:
 	_resolve_mesh_instance()
-	if mesh_instance == null or outline_material == null:
-		return
-	mesh_instance.material_overlay = outline_material if visible_outline else null
-	# Also outline any sibling/child meshes (multi-part props).
-	for child_mesh in _all_meshes(self):
-		if child_mesh == mesh_instance:
-			continue
-		child_mesh.material_overlay = outline_material if visible_outline else null
+	for mesh in _all_meshes(self):
+		# Clear any leftover inverted-hull overlay from the old outline system.
+		mesh.material_overlay = null
+		if visible_outline:
+			mesh.layers |= OUTLINE_LAYER_BIT
+		else:
+			mesh.layers &= ~OUTLINE_LAYER_BIT
 
 func _all_meshes(node: Node) -> Array[MeshInstance3D]:
 	var result: Array[MeshInstance3D] = []

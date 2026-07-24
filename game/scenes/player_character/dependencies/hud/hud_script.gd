@@ -47,6 +47,7 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_refresh_inventory_layout)
 	_setup_inventory_ui()
 	_setup_tool_hotbar()
+	_setup_outline_stencil.call_deferred()
 	_cicle_ui(0)
 	_setup_look_hint_label()
 	_hide_removed_debug_rows()
@@ -58,6 +59,19 @@ func _setup_tool_hotbar() -> void:
 	tool_hotbar.name = "ToolHotbar"
 	tool_hotbar.hud = self
 	add_child(tool_hotbar)
+
+func _setup_outline_stencil() -> void:
+	if not _is_local_hud():
+		return
+	if get_node_or_null("OutlineStencilOverlay") != null:
+		return
+	var overlay := OutlineStencilOverlay.new()
+	overlay.name = "OutlineStencilOverlay"
+	if play_char and play_char.cam:
+		overlay.source_camera = play_char.cam
+	# Draw under crosshair / inventory / hotbar.
+	add_child(overlay)
+	move_child(overlay, 0)
 
 func get_selected_hotbar_index() -> int:
 	if tool_hotbar == null:
@@ -363,6 +377,11 @@ func _process(_delta: float) -> void:
 		show()
 	if tool_hotbar:
 		tool_hotbar.visible = true
+	var outline := get_node_or_null("OutlineStencilOverlay") as OutlineStencilOverlay
+	if outline == null and _is_local_hud():
+		_setup_outline_stencil()
+	elif outline and play_char and play_char.cam and outline.source_camera != play_char.cam:
+		outline.source_camera = play_char.cam
 	display_current_FPS()
 	display_properties()
 	if look_hint_label and not look_hint_label.visible:

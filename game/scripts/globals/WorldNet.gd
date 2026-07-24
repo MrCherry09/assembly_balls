@@ -39,6 +39,19 @@ func setup(items: Node3D) -> void:
 	if not Online.player_connected.is_connected(_on_player_connected):
 		Online.player_connected.connect(_on_player_connected)
 
+## Clears all WorldNet session state. Call before rebuilding the world between matches.
+func reset_session() -> void:
+	_setup_done = false
+	_pose_sync_timer = 0.0
+	_holders.clear()
+	_drag_targets.clear()
+	_attack_last_ms.clear()
+	_items.clear()
+	_trees.clear()
+	_next_item_id = 1
+	_next_tree_id = 1
+	items_container = null
+
 func refresh_network() -> void:
 	## Call after a multiplayer peer is created so synchronizers/authority attach.
 	for item_id in _items.keys():
