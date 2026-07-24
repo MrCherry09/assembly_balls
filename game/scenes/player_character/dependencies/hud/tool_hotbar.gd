@@ -14,6 +14,7 @@ const VIBRANCY_MATERIAL: ShaderMaterial = preload("res://common/shaders/vibrancy
 
 var selected_index: int = 0
 var _tools: Array[ToolDefinition] = []
+var _tool_scene_paths: Array[String] = []
 var _cards: Array[PanelContainer] = []
 var _icons: Array[TextureRect] = []
 var _key_labels: Array[Label] = []
@@ -48,12 +49,14 @@ func get_tool_at(index: int) -> ToolDefinition:
 		return null
 	return _tools[index]
 
-func set_tool(index: int, tool: ToolDefinition) -> void:
+func set_tool(index: int, tool: ToolDefinition, scene_path: String = "") -> void:
 	if index < 0 or index >= SLOT_COUNT:
 		return
 	while _tools.size() < SLOT_COUNT:
 		_tools.append(null)
+		_tool_scene_paths.append("")
 	_tools[index] = tool
+	_tool_scene_paths[index] = scene_path
 	_refresh_slot(index)
 
 func select_index(index: int, animate: bool = true) -> void:
@@ -160,7 +163,7 @@ func _build_ui() -> void:
 	_name_labels.clear()
 
 	for i in SLOT_COUNT:
-		var card := PanelContainer.new()
+		var card = preload("res://scenes/player_character/dependencies/hud/tool_slot.gd").new()
 		card.name = "ToolCard_%d" % (i + 1)
 		card.custom_minimum_size = Vector2(CARD_WIDTH, 0.0)
 		card.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -168,6 +171,8 @@ func _build_ui() -> void:
 		card.add_theme_stylebox_override("panel", _card_style)
 		card.material = _make_vibrancy_material()
 		card.gui_input.connect(_on_slot_gui_input.bind(i))
+		card.slot_index = i
+		card.hotbar = self
 		_slots_row.add_child(card)
 
 		var vbox := VBoxContainer.new()
@@ -224,12 +229,12 @@ func _update_card_pivot(card: Control) -> void:
 
 func _seed_placeholder_loadout() -> void:
 	_tools.clear()
+	_tool_scene_paths.clear()
 	_tools.resize(SLOT_COUNT)
-	_tools[0] = _make_tool(&"hands", "Hands", DEFAULT_ICON)
-	_tools[1] = _make_tool(&"axe", "Axe", DEFAULT_ICON)
-	_tools[2] = _make_tool(&"pickaxe", "Pickaxe", DEFAULT_ICON)
-	for i in range(3, SLOT_COUNT):
+	_tool_scene_paths.resize(SLOT_COUNT)
+	for i in range(SLOT_COUNT):
 		_tools[i] = null
+		_tool_scene_paths[i] = ""
 
 func _make_tool(id: StringName, tool_name: String, icon: Texture2D) -> ToolDefinition:
 	var def := ToolDefinition.new()
@@ -307,3 +312,94 @@ func _on_slot_gui_input(event: InputEvent, index: int) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		select_index(index)
 		accept_event()
+
+func try_add_tool(item: Node) -> bool:
+	var scene_path = item.get_spawn_scene_path() if item.has_method("get_spawn_scene_path") else item.scene_file_path
+	var tool_def = item.get_tool_definition() if item.has_method("get_tool_definition") else null
+	if not tool_def:
+		return false
+	for i in SLOT_COUNT:
+		if _tools[i] == null:
+			set_tool(i, tool_def, scene_path)
+			return true
+	return false
+
+func _on_slot_get_drag_data(index: int, at_position: Vector2) -> Variant:
+	if index < 0 or index >= SLOT_COUNT or _tools[index] == null:
+		return null
+	
+	var tool = _tools[index]
+	var scene_path = _tool_scene_paths[index]
+	var tex = tool.icon if tool.icon else DEFAULT_ICON
+	
+	var data = {
+		"type": "tool_slot",
+		"slot_index": index,
+		"texture": tex,
+		"scene_path": scene_path,
+		"tool_def": tool
+	}
+	
+	var preview = TextureRect.new()
+	preview.texture = tex
+	preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	preview.custom_minimum_size = Vector2(ICON_SIZE, ICON_SIZE)
+	preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	preview.modulate = Color(1, 1, 1, 0.7)
+	
+	var preview_root = Control.new()
+	preview_root.add_child(preview)
+	preview.position = Vector2(-ICON_SIZE * 0.5, -ICON_SIZE * 0.5)
+	_cards[index].set_drag_preview(preview_root)
+	
+	set_tool(index, null, "")
+	
+	if hud:
+		hud._floating_drag_data = data
+		hud._floating_drag_active = true
+		hud._floating_was_dragging = true
+	
+	return data
+
+func _on_slot_can_drop_data(index: int, at_position: Vector2, data: Variant) -> bool:
+	if typeof(data) == TYPE_DICTIONARY and data.has("scene_path"):
+		return true
+	return false
+
+func _on_slot_drop_data(index: int, at_position: Vector2, data: Variant) -> void:
+	if not (typeof(data) == TYPE_DICTIONARY and data.has("scene_path")):
+		return
+	
+	var scene_path = data["scene_path"]
+	var tex = data.get("texture", DEFAULT_ICON)
+	var tool_def = data.get("tool_def")
+	
+	if tool_def == null:
+		tool_def = _make_tool(StringName(scene_path.get_file()), "Tool", tex)
+	
+	var existing_tool = _tools[index]
+	var existing_path = _tool_scene_paths[index]
+	
+	set_tool(index, tool_def, scene_path)
+	
+	if hud and hud.has_method("clear_floating_drag_state"):
+		hud.clear_floating_drag_state()
+	
+	if existing_tool != null:
+		var free_index = -1
+		for i in SLOT_COUNT:
+			if _tools[i] == null:
+				free_index = i
+				break
+		if free_index != -1:
+			set_tool(free_index, existing_tool, existing_path)
+		elif hud:
+			hud._floating_drag_data = {
+				"type": "tool_slot",
+				"slot_index": -1,
+				"texture": existing_tool.icon,
+				"scene_path": existing_path,
+				"tool_def": existing_tool
+			}
+			hud._floating_drag_active = true
+			hud._spawn_floating_drag_to_world()

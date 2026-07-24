@@ -341,11 +341,20 @@ func _is_local_hud() -> bool:
 		return play_char.is_multiplayer_authority()
 	return true
 
+func try_add_tool_item(item: Node) -> bool:
+	if not _is_local_hud() or tool_hotbar == null:
+		return false
+	return tool_hotbar.try_add_tool(item)
+
 func try_add_holdable_item(item: HoldableItem) -> bool:
+	if item is ToolItem:
+		return try_add_tool_item(item)
 	return stow_holdable_item(item) >= 0
 
 ## Prefer an empty slot under the cursor; otherwise first free slot.
 func try_add_holdable_item_at_point(item: HoldableItem, point: Vector2) -> bool:
+	if item is ToolItem:
+		return try_add_tool_item(item)
 	return stow_holdable_item(item, point) >= 0
 
 ## Puts a world item into inventory. Returns the slot index, or -1 on failure.
@@ -504,7 +513,7 @@ func _update_floating_inventory_drag() -> void:
 			_spawn_floating_drag_to_world()
 		return
 	_floating_was_dragging = dragging
-	if dragging and not is_point_over_inventory_ui(get_viewport().get_mouse_position()):
+	if dragging and not is_point_over_hud_ui(get_viewport().get_mouse_position()):
 		_spawn_floating_drag_to_world()
 
 func add_inventory_item_from_net(scene_path: String, icon_path: String) -> bool:
@@ -512,6 +521,18 @@ func add_inventory_item_from_net(scene_path: String, icon_path: String) -> bool:
 		return false
 	if scene_path == "":
 		return false
+	
+	var packed = load(scene_path) as PackedScene
+	if packed:
+		var item = packed.instantiate()
+		if item is ToolItem:
+			var added = try_add_tool_item(item)
+			item.queue_free()
+			if added:
+				return true
+		else:
+			item.queue_free()
+	
 	var slot_index := _find_first_free_inventory_slot()
 	if slot_index == -1:
 		return false

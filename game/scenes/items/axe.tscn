@@ -1,0 +1,24 @@
+[gd_scene format=4 uid="uid://axe1234567890"]
+
+[ext_resource type="Script" uid="uid://rf0u1qvivew4" path="res://scripts/tools/tool_item.gd" id="1_axe"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_axe1"]
+size = Vector3(0.1, 0.6, 0.2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_axe2"]
+size = Vector3(0.1, 0.6, 0.2)
+
+[node name="Axe" type="RigidBody3D" node_paths=PackedStringArray("mesh_instance")]
+collision_layer = 4
+collision_mask = 5
+script = ExtResource("1_axe")
+tool_id = &"axe"
+tool_name = "Axe"
+mesh_instance = NodePath("Mesh")
+mass_kg = 4.0
+
+[node name="Mesh" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_axe1")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("BoxShape3D_axe2")

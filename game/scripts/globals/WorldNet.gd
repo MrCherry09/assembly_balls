@@ -77,10 +77,9 @@ func _register_scene_world() -> void:
 	_trees.clear()
 	_next_item_id = 1
 	_next_tree_id = 1
-	if items_container:
-		for child in items_container.get_children():
-			if child is HoldableItem:
-				_register_existing_item(child as HoldableItem)
+	for child in get_tree().get_nodes_in_group("holdable_items"):
+		if child is HoldableItem:
+			_register_existing_item(child as HoldableItem)
 	_find_trees_recursive(get_tree().current_scene)
 
 func _find_trees_recursive(node: Node) -> void:
