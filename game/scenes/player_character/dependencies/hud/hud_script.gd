@@ -250,9 +250,12 @@ func set_pause_suppressed(suppressed: bool) -> void:
 		return
 	_pause_suppressed = suppressed
 	if suppressed:
-		# Floating inventory drag → commit into a slot (as if the player released over the panel).
 		if _floating_drag_active:
-			_place_floating_in_inventory_at_mouse()
+			var drag_type := str(_floating_drag_data.get("type", ""))
+			if drag_type == "inventory_slot":
+				_place_floating_in_inventory_at_mouse()
+			else:
+				_spawn_floating_drag_to_world()
 		if get_viewport().gui_is_dragging():
 			get_viewport().gui_cancel_drag()
 		# World-held items still soft-drop.
@@ -346,6 +349,11 @@ func try_add_tool_item(item: Node) -> bool:
 		return false
 	return tool_hotbar.try_add_tool(item)
 
+func try_add_tool_item_at_point(item: Node, point: Vector2) -> bool:
+	if not _is_local_hud() or tool_hotbar == null:
+		return false
+	return tool_hotbar.try_add_tool_at_point(item, point)
+
 func try_add_holdable_item(item: HoldableItem) -> bool:
 	if item is ToolItem:
 		return try_add_tool_item(item)
@@ -354,7 +362,7 @@ func try_add_holdable_item(item: HoldableItem) -> bool:
 ## Prefer an empty slot under the cursor; otherwise first free slot.
 func try_add_holdable_item_at_point(item: HoldableItem, point: Vector2) -> bool:
 	if item is ToolItem:
-		return try_add_tool_item(item)
+		return try_add_tool_item_at_point(item, point)
 	return stow_holdable_item(item, point) >= 0
 
 ## Puts a world item into inventory. Returns the slot index, or -1 on failure.
@@ -392,6 +400,8 @@ func find_inventory_slot_at_point(point: Vector2) -> int:
 func _put_holdable_in_slot(item: HoldableItem, slot_index: int) -> bool:
 	if slot_index < 0 or slot_index >= _inventory_slot_icons.size():
 		return false
+	if item is ToolItem:
+		return false
 	var scene_path := item.get_spawn_scene_path() if item.has_method("get_spawn_scene_path") else item.scene_file_path
 	if scene_path == "":
 		return false
@@ -404,6 +414,8 @@ func begin_floating_inventory_drag(scene_path: String, texture: Texture2D) -> bo
 	if not _is_local_hud() or not inventory_open:
 		return false
 	if scene_path == "" or not has_free_inventory_slot():
+		return false
+	if is_tool_scene_path(scene_path):
 		return false
 	if inventory_panel == null:
 		return false
@@ -431,13 +443,71 @@ func begin_floating_inventory_drag(scene_path: String, texture: Texture2D) -> bo
 	inventory_panel.force_drag(_floating_drag_data, preview_root)
 	return true
 
+func begin_floating_tool_drag(scene_path: String, texture: Texture2D, tool_def: ToolDefinition = null) -> bool:
+	if not _is_local_hud() or tool_hotbar == null:
+		return false
+	if scene_path == "":
+		return false
+	var def := tool_def
+	if def == null:
+		def = get_tool_definition_for_scene_path(scene_path, texture)
+	if def == null:
+		return false
+	var tex: Texture2D = texture if texture else (def.icon if def.icon else ToolHotbar.DEFAULT_ICON)
+	if def.icon == null:
+		def.icon = tex
+	_floating_drag_data = {
+		"type": "tool_slot",
+		"slot_index": -1,
+		"texture": tex,
+		"scene_path": scene_path,
+		"tool_def": def,
+	}
+	_floating_drag_active = true
+	_floating_was_dragging = true
+
+	var preview := TextureRect.new()
+	preview.texture = tex
+	preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	preview.custom_minimum_size = Vector2(ToolHotbar.ICON_SIZE, ToolHotbar.ICON_SIZE)
+	preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	preview.modulate = Color(1, 1, 1, 0.7)
+
+	var preview_root := Control.new()
+	preview_root.add_child(preview)
+	preview.position = Vector2(-ToolHotbar.ICON_SIZE * 0.5, -ToolHotbar.ICON_SIZE * 0.5)
+	tool_hotbar.force_drag(_floating_drag_data, preview_root)
+	return true
+
 func clear_floating_drag_state() -> void:
 	_floating_drag_active = false
 	_floating_drag_data.clear()
 	_floating_was_dragging = false
 
+func is_tool_scene_path(scene_path: String) -> bool:
+	return get_tool_definition_for_scene_path(scene_path) != null
+
+func get_tool_definition_for_scene_path(scene_path: String, fallback_texture: Texture2D = null) -> ToolDefinition:
+	if scene_path == "":
+		return null
+	var packed := load(scene_path) as PackedScene
+	if packed == null:
+		return null
+	var node := packed.instantiate()
+	if not (node is ToolItem):
+		node.queue_free()
+		return null
+	var def := (node as ToolItem).get_tool_definition()
+	if def and def.icon == null and fallback_texture:
+		def.icon = fallback_texture
+	node.queue_free()
+	return def
+
 func place_floating_drag_in_slot(slot_index: int, scene_path: String, texture: Texture2D) -> void:
 	if slot_index < 0 or slot_index >= _inventory_slot_scene_paths.size():
+		return
+	if is_tool_scene_path(scene_path):
+		_spawn_floating_drag_to_world()
 		return
 	var existing_path: String = _inventory_slot_scene_paths[slot_index]
 	var existing_tex: Texture2D = _inventory_slot_textures[slot_index]
@@ -489,6 +559,9 @@ func _place_floating_in_inventory_at_mouse() -> void:
 		clear_floating_drag_state()
 		return
 	var scene_path: String = str(_floating_drag_data.get("scene_path", ""))
+	if is_tool_scene_path(scene_path):
+		_spawn_floating_drag_to_world()
+		return
 	var texture_variant: Variant = _floating_drag_data.get("texture", null)
 	var texture: Texture2D = texture_variant as Texture2D
 	var point := get_viewport().get_mouse_position()
@@ -507,8 +580,12 @@ func _update_floating_inventory_drag() -> void:
 	var dragging := get_viewport().gui_is_dragging()
 	if _floating_was_dragging and not dragging:
 		# Drag ended without a successful slot drop.
-		if is_point_over_inventory_ui(get_viewport().get_mouse_position()):
+		var mouse := get_viewport().get_mouse_position()
+		var drag_type := str(_floating_drag_data.get("type", ""))
+		if drag_type == "inventory_slot" and is_point_over_inventory_ui(mouse):
 			_place_floating_in_inventory_at_mouse()
+		elif drag_type == "tool_slot" and tool_hotbar and tool_hotbar.place_tool_drag_data_at_point(mouse, _floating_drag_data):
+			clear_floating_drag_state()
 		else:
 			_spawn_floating_drag_to_world()
 		return
@@ -530,6 +607,14 @@ func add_inventory_item_from_net(scene_path: String, icon_path: String) -> bool:
 			item.queue_free()
 			if added:
 				return true
+			_floating_drag_data = {
+				"type": "tool_slot",
+				"slot_index": -1,
+				"texture": DEFAULT_INVENTORY_ICON,
+				"scene_path": scene_path,
+			}
+			_spawn_floating_drag_to_world()
+			return false
 		else:
 			item.queue_free()
 	
@@ -552,6 +637,14 @@ func begin_floating_drag_from_net(scene_path: String, icon_path: String) -> void
 		var loaded := load(icon_path)
 		if loaded is Texture2D:
 			icon_texture = loaded
+	if is_tool_scene_path(scene_path):
+		if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+			begin_floating_tool_drag(scene_path, icon_texture)
+		else:
+			var def := get_tool_definition_for_scene_path(scene_path, icon_texture)
+			if def and tool_hotbar:
+				tool_hotbar.try_add_tool_definition(def, scene_path)
+		return
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		begin_floating_inventory_drag(scene_path, icon_texture)
 	else:

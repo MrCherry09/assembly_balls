@@ -745,11 +745,11 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.4234533, 1.9999999, -0.879
 [node name="Tree4" parent="." unique_id=1838096736 instance=ExtResource("18_4pl0j")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.305458, 2, -5.277)
 
-[node name="Axe" parent="." unique_id=1217830218 instance=ExtResource("20_yp3dt")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.5099716, 1.2971561, 1.4692497)
+[node name="Axe" parent="." unique_id=566800164 instance=ExtResource("20_yp3dt")]
+transform = Transform3D(3, 0, 0, 0, 3, 0, 0, 0, 3, -2.220966, 2.323949, 1.5670509)
 
-[node name="Axe2" parent="." unique_id=48295000 instance=ExtResource("20_yp3dt")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.5099716, 1.2971561, 3.290463)
+[node name="Axe2" parent="." unique_id=2063247199 instance=ExtResource("20_yp3dt")]
+transform = Transform3D(3, 0, 0, 0, 3, 0, 0, 0, 3, -2.5653014, 2.2478576, 0)
 
 [connection signal="pressed" from="CanvasLayer/UI/InGameUI/PauseBackdrop/MarginContainer/VBoxContainer/ResumeButton" to="." method="_on_resume_button_pressed"]
 [connection signal="pressed" from="CanvasLayer/UI/InGameUI/PauseBackdrop/MarginContainer/VBoxContainer/OptionsButton" to="." method="_on_options_button_pressed"]

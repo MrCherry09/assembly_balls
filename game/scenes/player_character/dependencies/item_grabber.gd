@@ -135,11 +135,15 @@ func _physics_process(delta: float) -> void:
 	if not _grab_held:
 		_release_held()
 		return
-	# Crossing into the open inventory converts to the same icon UI-drag as taking items out.
 	var hud := _hud()
-	if hud and hud.inventory_open and hud.is_point_over_inventory_ui(_drag_cursor_vp()):
-		_try_convert_held_to_inventory_ui_drag()
-		return
+	var drag_point := _drag_cursor_vp()
+	if hud and hud.is_point_over_tool_hotbar(drag_point):
+		if _try_convert_held_tool_to_hotbar_ui_drag():
+			return
+	# Crossing into the open inventory converts to the same icon UI-drag as taking items out.
+	if hud and hud.inventory_open and hud.is_point_over_inventory_ui(drag_point):
+		if _try_convert_held_to_inventory_ui_drag():
+			return
 	_drag_on_depth_plane(delta)
 
 ## Soft drop used when pausing — no throw impulse.
@@ -178,6 +182,9 @@ func _release_held() -> void:
 	# Fallback: released over inventory without a UI-drag convert (e.g. inventory full earlier).
 	var hud := _hud()
 	var mouse := _drag_cursor_vp()
+	if hud and hud.is_point_over_tool_hotbar(mouse):
+		if _stow_held_tool_to_hotbar(mouse):
+			return
 	if hud and hud.is_point_over_inventory_ui(mouse):
 		if _stow_held_to_inventory(mouse):
 			return
@@ -205,6 +212,8 @@ func _try_convert_held_to_inventory_ui_drag() -> bool:
 	var hud := _hud()
 	if hud == null or held_item == null or not is_instance_valid(held_item):
 		return false
+	if held_item is ToolItem:
+		return false
 	if not hud.has_free_inventory_slot():
 		return false
 
@@ -224,7 +233,11 @@ func _try_convert_held_to_inventory_ui_drag() -> bool:
 	var scene_path := item.get_spawn_scene_path()
 	if scene_path == "":
 		scene_path = item.scene_file_path
+	if scene_path == "":
+		return false
 	var icon_tex: Texture2D = item.inventory_icon if item.inventory_icon else null
+	if not hud.begin_floating_inventory_drag(scene_path, icon_tex):
+		return false
 	held_item = null
 	_grab_held = false
 	_grab_depth = 0.0
@@ -232,12 +245,52 @@ func _try_convert_held_to_inventory_ui_drag() -> bool:
 	_throw_velocity = Vector3.ZERO
 	_pending_grab_id = 0
 	item.queue_free()
-	return hud.begin_floating_inventory_drag(scene_path, icon_tex)
+	return true
+
+## World-held tool -> floating hotbar UI drag.
+func _try_convert_held_tool_to_hotbar_ui_drag() -> bool:
+	var hud := _hud()
+	if hud == null or held_item == null or not is_instance_valid(held_item):
+		return false
+	var tool := held_item as ToolItem
+	if tool == null:
+		return false
+
+	if _uses_world_net():
+		var item_id := tool.item_id
+		held_item = null
+		_grab_held = false
+		_grab_depth = 0.0
+		_grab_offset = Vector3.ZERO
+		_throw_velocity = Vector3.ZERO
+		_pending_grab_id = 0
+		WorldNet.request_inventory_drag_consume(item_id)
+		return true
+
+	var scene_path := tool.get_spawn_scene_path()
+	if scene_path == "":
+		scene_path = tool.scene_file_path
+	if scene_path == "":
+		return false
+	var icon_tex: Texture2D = tool.inventory_icon if tool.inventory_icon else null
+	var tool_def := tool.get_tool_definition()
+	if not hud.begin_floating_tool_drag(scene_path, icon_tex, tool_def):
+		return false
+	held_item = null
+	_grab_held = false
+	_grab_depth = 0.0
+	_grab_offset = Vector3.ZERO
+	_throw_velocity = Vector3.ZERO
+	_pending_grab_id = 0
+	tool.queue_free()
+	return true
 
 ## Drop a held world item into the inventory without starting UI drag.
 func _stow_held_to_inventory(point: Vector2) -> bool:
 	var hud := _hud()
 	if hud == null or held_item == null or not is_instance_valid(held_item):
+		return false
+	if held_item is ToolItem:
 		return false
 
 	if _uses_world_net():
@@ -253,6 +306,37 @@ func _stow_held_to_inventory(point: Vector2) -> bool:
 
 	var item := held_item
 	if not hud.try_add_holdable_item_at_point(item, point):
+		return false
+	held_item = null
+	_grab_held = false
+	_grab_depth = 0.0
+	_grab_offset = Vector3.ZERO
+	_throw_velocity = Vector3.ZERO
+	_pending_grab_id = 0
+	item.queue_free()
+	return true
+
+## Direct release fallback for a held tool over the hotbar.
+func _stow_held_tool_to_hotbar(point: Vector2) -> bool:
+	var hud := _hud()
+	if hud == null or held_item == null or not is_instance_valid(held_item):
+		return false
+	if not (held_item is ToolItem):
+		return false
+
+	if _uses_world_net():
+		var item_id := held_item.item_id
+		held_item = null
+		_grab_held = false
+		_grab_depth = 0.0
+		_grab_offset = Vector3.ZERO
+		_throw_velocity = Vector3.ZERO
+		_pending_grab_id = 0
+		WorldNet.request_pickup(item_id)
+		return true
+
+	var item := held_item
+	if not hud.try_add_tool_item_at_point(item, point):
 		return false
 	held_item = null
 	_grab_held = false

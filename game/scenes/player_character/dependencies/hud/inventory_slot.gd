@@ -74,6 +74,8 @@ func _begin_slot_drag(use_set_preview: bool) -> Variant:
 
 func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
 	if typeof(data) == TYPE_DICTIONARY and data.has("type") and data["type"] == "inventory_slot":
+		if hud and hud.is_tool_scene_path(str(data.get("scene_path", ""))):
+			return false
 		return true
 	return false
 
@@ -83,6 +85,8 @@ func _drop_data(_at_position: Vector2, data: Variant) -> void:
 
 	var source_index: int = int(data["slot_index"])
 	var source_path: String = str(data["scene_path"])
+	if hud and hud.is_tool_scene_path(source_path):
+		return
 	var source_tex: Texture2D = data["texture"] as Texture2D
 
 	# Floating drag from the world — not in a slot until this drop.

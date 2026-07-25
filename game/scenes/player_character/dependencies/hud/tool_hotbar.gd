@@ -318,11 +318,26 @@ func try_add_tool(item: Node) -> bool:
 	var tool_def = item.get_tool_definition() if item.has_method("get_tool_definition") else null
 	if not tool_def:
 		return false
+	return try_add_tool_definition(tool_def, scene_path)
+
+func try_add_tool_definition(tool_def: ToolDefinition, scene_path: String = "") -> bool:
+	if tool_def == null:
+		return false
 	for i in SLOT_COUNT:
 		if _tools[i] == null:
 			set_tool(i, tool_def, scene_path)
 			return true
 	return false
+
+func try_add_tool_at_point(item: Node, point: Vector2) -> bool:
+	var scene_path = item.get_spawn_scene_path() if item.has_method("get_spawn_scene_path") else item.scene_file_path
+	var tool_def = item.get_tool_definition() if item.has_method("get_tool_definition") else null
+	if not tool_def:
+		return false
+	var slot_index := _find_slot_at_point(point)
+	if slot_index >= 0:
+		return _place_tool_in_slot(slot_index, scene_path, tool_def.icon, tool_def)
+	return try_add_tool_definition(tool_def, scene_path)
 
 func _on_slot_get_drag_data(index: int, at_position: Vector2) -> Variant:
 	if index < 0 or index >= SLOT_COUNT or _tools[index] == null:
@@ -362,25 +377,56 @@ func _on_slot_get_drag_data(index: int, at_position: Vector2) -> Variant:
 	return data
 
 func _on_slot_can_drop_data(index: int, at_position: Vector2, data: Variant) -> bool:
-	if typeof(data) == TYPE_DICTIONARY and data.has("scene_path"):
+	if typeof(data) != TYPE_DICTIONARY:
+		return false
+	var drag_type := str(data.get("type", ""))
+	if drag_type == "tool_slot":
+		return true
+	if drag_type == "inventory_slot" and hud and hud.is_tool_scene_path(str(data.get("scene_path", ""))):
 		return true
 	return false
 
 func _on_slot_drop_data(index: int, at_position: Vector2, data: Variant) -> void:
-	if not (typeof(data) == TYPE_DICTIONARY and data.has("scene_path")):
+	if typeof(data) != TYPE_DICTIONARY:
 		return
-	
-	var scene_path = data["scene_path"]
-	var tex = data.get("texture", DEFAULT_ICON)
-	var tool_def = data.get("tool_def")
-	
+	_place_tool_drag_data_in_slot(index, data)
+
+func place_tool_drag_data_at_point(point: Vector2, data: Dictionary) -> bool:
+	var slot_index := _find_slot_at_point(point)
+	if slot_index < 0:
+		return false
+	return _place_tool_drag_data_in_slot(slot_index, data)
+
+func _place_tool_drag_data_in_slot(index: int, data: Dictionary) -> bool:
+	if index < 0 or index >= SLOT_COUNT or not data.has("scene_path"):
+		return false
+	var drag_type := str(data.get("type", ""))
+	if drag_type != "tool_slot" and not (drag_type == "inventory_slot" and hud and hud.is_tool_scene_path(str(data.get("scene_path", "")))):
+		return false
+	var scene_path := str(data["scene_path"])
+	var tex_variant: Variant = data.get("texture", DEFAULT_ICON)
+	var tex := tex_variant as Texture2D
+	if tex == null:
+		tex = DEFAULT_ICON
+	var tool_def := data.get("tool_def", null) as ToolDefinition
+	if tool_def == null and hud:
+		tool_def = hud.get_tool_definition_for_scene_path(scene_path, tex)
 	if tool_def == null:
-		tool_def = _make_tool(StringName(scene_path.get_file()), "Tool", tex)
-	
+		return false
+	return _place_tool_in_slot(index, scene_path, tex, tool_def, data)
+
+func _place_tool_in_slot(index: int, scene_path: String, _tex: Texture2D, tool_def: ToolDefinition, source_data: Dictionary = {}) -> bool:
+	if index < 0 or index >= SLOT_COUNT or tool_def == null:
+		return false
 	var existing_tool = _tools[index]
 	var existing_path = _tool_scene_paths[index]
 	
 	set_tool(index, tool_def, scene_path)
+	
+	if hud and str(source_data.get("type", "")) == "inventory_slot":
+		var source_index := int(source_data.get("slot_index", -1))
+		if source_index >= 0:
+			hud._clear_inventory_slot(source_index)
 	
 	if hud and hud.has_method("clear_floating_drag_state"):
 		hud.clear_floating_drag_state()
@@ -403,3 +449,12 @@ func _on_slot_drop_data(index: int, at_position: Vector2, data: Variant) -> void
 			}
 			hud._floating_drag_active = true
 			hud._spawn_floating_drag_to_world()
+	return true
+
+func _find_slot_at_point(point: Vector2) -> int:
+	if not visible:
+		return -1
+	for i in _cards.size():
+		if _cards[i].get_global_rect().has_point(point):
+			return i
+	return -1
