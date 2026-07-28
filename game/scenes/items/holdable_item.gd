@@ -43,10 +43,13 @@ var _net_rot: Vector3 = Vector3.ZERO
 var _net_vel: Vector3 = Vector3.ZERO
 var _net_age_sec: float = 0.0
 var _has_net_pose: bool = false
+## Scene-authored scale (axe is 3×). Client pose sync must not wipe this.
+var _authored_scale: Vector3 = Vector3.ONE
 
 func _ready() -> void:
 	_resolve_mesh_instance()
 	add_to_group("holdable_items")
+	_authored_scale = scale
 	_default_gravity_scale = free_gravity_scale
 	gravity_scale = free_gravity_scale
 	mass = mass_kg
@@ -181,7 +184,9 @@ func _lerp_euler(from: Vector3, to: Vector3, weight: float) -> Vector3:
 	)
 
 func _teleport_visual(pos: Vector3, rot: Vector3) -> void:
-	var xf := Transform3D(Basis.from_euler(rot), pos)
+	# Pose RPCs only carry position/rotation — rebuild basis without dropping scene scale.
+	var basis := Basis.from_euler(rot).scaled(_authored_scale)
+	var xf := Transform3D(basis, pos)
 	PhysicsServer3D.body_set_state(get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM, xf)
 	global_transform = xf
 	linear_velocity = Vector3.ZERO

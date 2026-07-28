@@ -62,24 +62,27 @@ func _apply_pause_vibrancy() -> void:
 	pause_backdrop.material = VIBRANCY_MATERIAL.duplicate()
 
 func _cache_pristine_world() -> void:
-	# Don't PackedScene.pack(Items): authored children own the lobby root, so pack drops them.
+	# Snapshot every holdable (not only World3D/Items) so misplaced props like root-level axes restore.
 	_pristine_item_spawns.clear()
-	var items := get_node_or_null("World3D/Items") as Node3D
-	if items:
-		for child in items.get_children():
-			var holdable := child as HoldableItem
-			if holdable == null:
-				continue
-			var scene_path := holdable.get_spawn_scene_path()
-			if scene_path == "":
-				scene_path = holdable.scene_file_path
-			if scene_path == "":
-				continue
-			_pristine_item_spawns.append({
-				"scene_path": scene_path,
-				"transform": holdable.transform,
-				"name": holdable.name,
-			})
+	for node in get_tree().get_nodes_in_group("holdable_items"):
+		var holdable := node as HoldableItem
+		if holdable == null or not is_instance_valid(holdable):
+			continue
+		var scene_path := holdable.get_spawn_scene_path()
+		if scene_path == "":
+			scene_path = holdable.scene_file_path
+		if scene_path == "":
+			continue
+		var parent := holdable.get_parent()
+		if parent == null:
+			continue
+		_pristine_item_spawns.append({
+			"scene_path": scene_path,
+			"transform": holdable.transform,
+			"name": holdable.name,
+			"parent_path": str(get_path_to(parent)),
+			"index": holdable.get_index(),
+		})
 
 	_pristine_trees.clear()
 	for node in get_tree().get_nodes_in_group("network_trees"):
@@ -126,28 +129,37 @@ func reset_match_world() -> void:
 
 	WorldNet.reset_session()
 
-	var items := get_node_or_null("World3D/Items") as Node3D
-	if items:
-		for child in items.get_children():
-			items.remove_child(child)
-			child.free()
-		for entry in _pristine_item_spawns:
-			var scene_path: String = entry.get("scene_path", "")
-			if scene_path == "":
-				continue
-			var packed := load(scene_path) as PackedScene
-			if packed == null:
-				push_warning("Lobby reset: missing item scene %s" % scene_path)
-				continue
-			var item := packed.instantiate() as Node3D
-			if item == null:
-				continue
-			item.name = str(entry.get("name", item.name))
-			items.add_child(item)
-			item.transform = entry.get("transform", Transform3D.IDENTITY)
-			if item is HoldableItem:
-				(item as HoldableItem).item_id = 0
-				(item as HoldableItem).set_spawn_scene_path(scene_path)
+	# Free every live holdable (including root-level props like axes), then respawn pristine set.
+	var live_items: Array = get_tree().get_nodes_in_group("holdable_items")
+	for node in live_items:
+		if is_instance_valid(node):
+			node.free()
+
+	var items_fallback := get_node_or_null("World3D/Items") as Node3D
+	for entry in _pristine_item_spawns:
+		var scene_path: String = entry.get("scene_path", "")
+		if scene_path == "":
+			continue
+		var packed := load(scene_path) as PackedScene
+		if packed == null:
+			push_warning("Lobby reset: missing item scene %s" % scene_path)
+			continue
+		var item := packed.instantiate() as Node3D
+		if item == null:
+			continue
+		var parent := get_node_or_null(NodePath(entry.get("parent_path", "World3D/Items"))) as Node
+		if parent == null:
+			parent = items_fallback
+		if parent == null:
+			parent = self
+		item.name = str(entry.get("name", item.name))
+		parent.add_child(item)
+		var idx: int = int(entry.get("index", parent.get_child_count() - 1))
+		parent.move_child(item, mini(idx, parent.get_child_count() - 1))
+		item.transform = entry.get("transform", Transform3D.IDENTITY)
+		if item is HoldableItem:
+			(item as HoldableItem).item_id = 0
+			(item as HoldableItem).set_spawn_scene_path(scene_path)
 
 	# Remove every tree (chopped, damaged, or still standing).
 	var live_trees: Array = get_tree().get_nodes_in_group("network_trees")
