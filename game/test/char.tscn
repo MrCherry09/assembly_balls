@@ -1,15 +1,15 @@
 [gd_scene format=4 uid="uid://bhee2qdrrnnbo"]
 
-[ext_resource type="AnimationLibrary" uid="uid://qqcjy0q57vha" path="res://Booty Hip Hop Dance.fbx" id="1_fgjvv"]
+[ext_resource type="AnimationLibrary" uid="uid://qqcjy0q57vha" path="res://anim/Booty Hip Hop Dance.fbx" id="1_fgjvv"]
 [ext_resource type="Texture2D" uid="uid://ckfv056vu8oiv" path="res://models/common/survivor__antoni_galmes_oliver_0.png" id="1_usj2u"]
-[ext_resource type="AnimationLibrary" uid="uid://dspxos45p5ku2" path="res://Idle To Sprint.fbx" id="2_p75im"]
-[ext_resource type="AnimationLibrary" uid="uid://gd4thhfgyxt1" path="res://Jump.fbx" id="3_vd6sw"]
-[ext_resource type="AnimationLibrary" uid="uid://dylujor6hwjqr" path="res://Rumba Dancing.fbx" id="4_j07px"]
-[ext_resource type="AnimationLibrary" uid="uid://fafifwo1btim" path="res://Running Jump.fbx" id="5_eog85"]
-[ext_resource type="AnimationLibrary" uid="uid://cna51icculhfq" path="res://Running Slide.fbx" id="6_m56rt"]
-[ext_resource type="AnimationLibrary" uid="uid://ceasl05v4wdvs" path="res://Sprinting Forward Roll.fbx" id="7_hernl"]
-[ext_resource type="AnimationLibrary" uid="uid://xouhoiw0qima" path="res://Swing Dancing.fbx" id="8_hlxu8"]
-[ext_resource type="AnimationLibrary" uid="uid://ce436a31sbahy" path="res://Wave Hip Hop Dance.fbx" id="9_a640e"]
+[ext_resource type="AnimationLibrary" uid="uid://dspxos45p5ku2" path="res://anim/Idle To Sprint.fbx" id="2_p75im"]
+[ext_resource type="AnimationLibrary" uid="uid://gd4thhfgyxt1" path="res://anim/Jump.fbx" id="3_vd6sw"]
+[ext_resource type="AnimationLibrary" uid="uid://dylujor6hwjqr" path="res://anim/Rumba Dancing.fbx" id="4_j07px"]
+[ext_resource type="AnimationLibrary" uid="uid://fafifwo1btim" path="res://anim/Running Jump.fbx" id="5_eog85"]
+[ext_resource type="AnimationLibrary" uid="uid://cna51icculhfq" path="res://anim/Running Slide.fbx" id="6_m56rt"]
+[ext_resource type="AnimationLibrary" uid="uid://ceasl05v4wdvs" path="res://anim/Sprinting Forward Roll.fbx" id="7_hernl"]
+[ext_resource type="AnimationLibrary" uid="uid://xouhoiw0qima" path="res://anim/Swing Dancing.fbx" id="8_hlxu8"]
+[ext_resource type="AnimationLibrary" uid="uid://ce436a31sbahy" path="res://anim/Wave Hip Hop Dance.fbx" id="9_a640e"]
 
 [sub_resource type="Animation" id="Animation_usj2u"]
 resource_name = "mixamo_com"
@@ -270,6 +270,7 @@ bind/24/bone = -1
 bind/24/pose = Transform3D(-0.008218847, 0.0036353534, 0.9999596, -0.6638244, -0.7478834, -0.0027371794, 0.7478433, -0.66382015, 0.008559991, 0.2071857, 1.7370771, 4.5502625)
 
 [node name="Node3D" type="Node3D" unique_id=1536835900]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
 
 [node name="Armature" type="Node3D" parent="." unique_id=466952333]
 transform = Transform3D(0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, 0, 2, 0)

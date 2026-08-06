@@ -3,13 +3,13 @@
 importer="animation_library"
 importer_version=1
 type="AnimationLibrary"
-uid="uid://ce436a31sbahy"
-path="res://.godot/imported/Wave Hip Hop Dance.fbx-f494598280d189830e41967b35290f32.res"
+uid="uid://qqcjy0q57vha"
+path="res://.godot/imported/Booty Hip Hop Dance.fbx-2934d007494881043a446f14ce94993a.res"
 
 [deps]
 
-source_file="res://Wave Hip Hop Dance.fbx"
-dest_files=["res://.godot/imported/Wave Hip Hop Dance.fbx-f494598280d189830e41967b35290f32.res"]
+source_file="res://anim/Booty Hip Hop Dance.fbx"
+dest_files=["res://.godot/imported/Booty Hip Hop Dance.fbx-2934d007494881043a446f14ce94993a.res"]
 
 [params]
 

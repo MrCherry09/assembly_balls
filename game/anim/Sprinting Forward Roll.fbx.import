@@ -3,13 +3,13 @@
 importer="animation_library"
 importer_version=1
 type="AnimationLibrary"
-uid="uid://fafifwo1btim"
-path="res://.godot/imported/Running Jump.fbx-ac754a5da0f93bc85847205d4421a047.res"
+uid="uid://ceasl05v4wdvs"
+path="res://.godot/imported/Sprinting Forward Roll.fbx-63cb7b990954bfff0e6f90e3811c9f4e.res"
 
 [deps]
 
-source_file="res://Running Jump.fbx"
-dest_files=["res://.godot/imported/Running Jump.fbx-ac754a5da0f93bc85847205d4421a047.res"]
+source_file="res://anim/Sprinting Forward Roll.fbx"
+dest_files=["res://.godot/imported/Sprinting Forward Roll.fbx-63cb7b990954bfff0e6f90e3811c9f4e.res"]
 
 [params]
 

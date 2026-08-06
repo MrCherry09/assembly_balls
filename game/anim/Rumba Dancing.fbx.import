@@ -3,13 +3,13 @@
 importer="animation_library"
 importer_version=1
 type="AnimationLibrary"
-uid="uid://xouhoiw0qima"
-path="res://.godot/imported/Swing Dancing.fbx-51307b2e712741f9e25be51d7fe0c637.res"
+uid="uid://dylujor6hwjqr"
+path="res://.godot/imported/Rumba Dancing.fbx-59ff7ce1058110f5b8796fd5791d6b51.res"
 
 [deps]
 
-source_file="res://Swing Dancing.fbx"
-dest_files=["res://.godot/imported/Swing Dancing.fbx-51307b2e712741f9e25be51d7fe0c637.res"]
+source_file="res://anim/Rumba Dancing.fbx"
+dest_files=["res://.godot/imported/Rumba Dancing.fbx-59ff7ce1058110f5b8796fd5791d6b51.res"]
 
 [params]
 

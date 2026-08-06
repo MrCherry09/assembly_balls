@@ -3,13 +3,13 @@
 importer="animation_library"
 importer_version=1
 type="AnimationLibrary"
-uid="uid://dspxos45p5ku2"
-path="res://.godot/imported/Idle To Sprint.fbx-2b75f9316168d9cef76ad374f904163d.res"
+uid="uid://gd4thhfgyxt1"
+path="res://.godot/imported/Jump.fbx-03e331afc4a38aef03d518595532d287.res"
 
 [deps]
 
-source_file="res://Idle To Sprint.fbx"
-dest_files=["res://.godot/imported/Idle To Sprint.fbx-2b75f9316168d9cef76ad374f904163d.res"]
+source_file="res://anim/Jump.fbx"
+dest_files=["res://.godot/imported/Jump.fbx-03e331afc4a38aef03d518595532d287.res"]
 
 [params]
 

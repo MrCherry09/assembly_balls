@@ -3,13 +3,13 @@
 importer="animation_library"
 importer_version=1
 type="AnimationLibrary"
-uid="uid://dylujor6hwjqr"
-path="res://.godot/imported/Rumba Dancing.fbx-36208e126c675f73217309b189cbe43f.res"
+uid="uid://ce436a31sbahy"
+path="res://.godot/imported/Wave Hip Hop Dance.fbx-211ee07a9b51be5cf63fd017878b09b0.res"
 
 [deps]
 
-source_file="res://Rumba Dancing.fbx"
-dest_files=["res://.godot/imported/Rumba Dancing.fbx-36208e126c675f73217309b189cbe43f.res"]
+source_file="res://anim/Wave Hip Hop Dance.fbx"
+dest_files=["res://.godot/imported/Wave Hip Hop Dance.fbx-211ee07a9b51be5cf63fd017878b09b0.res"]
 
 [params]
 

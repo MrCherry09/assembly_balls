@@ -6,6 +6,15 @@ const AIM_ROTATION_SYNC_SPEED: float = 40.0
 @export var anim_lib_prefix := "Robot/"
 @export var player: PlayerCharacter = null
 @export var animation_player: AnimationPlayer = null
+
+@export_group("Animations")
+@export var anim_idle := "Idle"
+@export var anim_walk := "Walk"
+@export var anim_run := "Run"
+@export var anim_crouch := "Crouch"
+@export var anim_jump := "Jump"
+@export var anim_jump1 := "Jump1"
+@export var anim_inair := "Inair"
 @onready var limbs_and_head: MeshInstance3D = %"Limbs and head"
 @onready var cam_face_link: Node3D = %CamFaceLink
 @onready var skeleton_3d: Skeleton3D = $RobotArmature/Skeleton3D
@@ -44,23 +53,23 @@ func _update_animations() -> void:
 	var anim := ""
 	if last_state != curr_state:
 		if curr_state is JumpState:
-			if not last_anim.containsn("Jump"):
-				if last_anim == "Crouch":
-					anim = "Jump1"
+			if not (last_anim == anim_jump or last_anim == anim_jump1):
+				if last_anim == anim_crouch:
+					anim = anim_jump1
 					blend = 0.3
 				else:
-					anim = "Jump"
+					anim = anim_jump
 
 	if curr_state is InairState:
-		anim = "Inair"
+		anim = anim_inair
 	if curr_state is WalkState:
-		anim = "Walk"
+		anim = anim_walk
 	if curr_state is RunState:
-		anim = "Run"
+		anim = anim_run
 	if curr_state is CrouchState:
-		anim = "Crouch"
+		anim = anim_crouch
 	if curr_state is IdleState:
-		anim = "Idle"
+		anim = anim_idle
 
 	last_anim = anim
 	last_state = curr_state

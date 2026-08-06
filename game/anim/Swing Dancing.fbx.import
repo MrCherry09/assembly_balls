@@ -3,13 +3,13 @@
 importer="animation_library"
 importer_version=1
 type="AnimationLibrary"
-uid="uid://qqcjy0q57vha"
-path="res://.godot/imported/Booty Hip Hop Dance.fbx-75f7612ffa382ab7d9d9bd43c8dd183e.res"
+uid="uid://xouhoiw0qima"
+path="res://.godot/imported/Swing Dancing.fbx-6032989d6286275cf98ee1fb5b88a3f5.res"
 
 [deps]
 
-source_file="res://Booty Hip Hop Dance.fbx"
-dest_files=["res://.godot/imported/Booty Hip Hop Dance.fbx-75f7612ffa382ab7d9d9bd43c8dd183e.res"]
+source_file="res://anim/Swing Dancing.fbx"
+dest_files=["res://.godot/imported/Swing Dancing.fbx-6032989d6286275cf98ee1fb5b88a3f5.res"]
 
 [params]
 

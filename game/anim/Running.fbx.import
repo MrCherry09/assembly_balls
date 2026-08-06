@@ -4,12 +4,12 @@ importer="animation_library"
 importer_version=1
 type="AnimationLibrary"
 uid="uid://sncdcq1wbwi3"
-path="res://.godot/imported/Running.fbx-ab3f7a7ab25759caeb9223a9f20b6834.res"
+path="res://.godot/imported/Running.fbx-9c336d77832f72741420324d6e8e82a1.res"
 
 [deps]
 
-source_file="res://Running.fbx"
-dest_files=["res://.godot/imported/Running.fbx-ab3f7a7ab25759caeb9223a9f20b6834.res"]
+source_file="res://anim/Running.fbx"
+dest_files=["res://.godot/imported/Running.fbx-9c336d77832f72741420324d6e8e82a1.res"]
 
 [params]
 

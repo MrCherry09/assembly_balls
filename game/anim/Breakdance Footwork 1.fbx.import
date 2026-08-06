@@ -4,12 +4,12 @@ importer="animation_library"
 importer_version=1
 type="AnimationLibrary"
 uid="uid://cjcgg6fu4s3lr"
-path="res://.godot/imported/Breakdance Footwork 1.fbx-0a1e6c35c8443ac778d1ed28e7ebb599.res"
+path="res://.godot/imported/Breakdance Footwork 1.fbx-56b54094010b93484d4a2f361eae975d.res"
 
 [deps]
 
-source_file="res://Breakdance Footwork 1.fbx"
-dest_files=["res://.godot/imported/Breakdance Footwork 1.fbx-0a1e6c35c8443ac778d1ed28e7ebb599.res"]
+source_file="res://anim/Breakdance Footwork 1.fbx"
+dest_files=["res://.godot/imported/Breakdance Footwork 1.fbx-56b54094010b93484d4a2f361eae975d.res"]
 
 [params]
 
