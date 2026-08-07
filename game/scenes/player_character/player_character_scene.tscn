@@ -52,24 +52,15 @@ properties/0/replication_mode = 1
 properties/1/path = NodePath("CameraHolder:rotation")
 properties/1/spawn = true
 properties/1/replication_mode = 1
-properties/2/path = NodePath("CharacterModel/RobotModel/AnimationPlayer:current_animation")
+properties/2/path = NodePath("CharacterModel:position")
 properties/2/spawn = true
 properties/2/replication_mode = 1
-properties/3/path = NodePath("CharacterModel/RobotModel/AnimationPlayer:playback_default_blend_time")
+properties/3/path = NodePath("PlayerNick/NickLabel:text")
 properties/3/spawn = true
 properties/3/replication_mode = 1
-properties/4/path = NodePath("CharacterModel/RobotModel/AnimationPlayer:speed_scale")
+properties/4/path = NodePath("CharacterModel:rotation")
 properties/4/spawn = true
 properties/4/replication_mode = 1
-properties/5/path = NodePath("CharacterModel:position")
-properties/5/spawn = true
-properties/5/replication_mode = 1
-properties/6/path = NodePath("PlayerNick/NickLabel:text")
-properties/6/spawn = true
-properties/6/replication_mode = 1
-properties/7/path = NodePath("CharacterModel:rotation")
-properties/7/spawn = true
-properties/7/replication_mode = 1
 
 [sub_resource type="Animation" id="Animation_xpx05"]
 resource_name = "mixamo_com"
@@ -3816,6 +3807,5 @@ mesh = SubResource("SphereMesh_u7t1t")
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="CharacterModel/RobotModel" unique_id=1516866237]
 libraries/Robot = ExtResource("23_1dajo")
-autoplay = &"Idle"
 
 [connection signal="change_fov" from="StateMachine" to="CameraHolder" method="change_fov"]
