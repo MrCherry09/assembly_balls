@@ -39,16 +39,11 @@ func input_management() -> void:
 			transitioned.emit(self, "JumpState")
 	if play_char.action_just_pressed(play_char.crouch_action):
 		transitioned.emit(self, "CrouchState")
-	if play_char.action_just_pressed(play_char.run_action):
-		if play_char.walk_or_run == "WalkState":
-			play_char.walk_or_run = "RunState"
-		elif play_char.walk_or_run == "RunState":
-			play_char.walk_or_run = "WalkState"
 
 func move() -> void:
 	play_char.input_direction = play_char.get_move_input()
 	play_char.move_direction = (play_char.cam_holder.global_basis * Vector3(play_char.input_direction.x, 0.0, play_char.input_direction.y)).normalized()
 	if play_char.move_direction and play_char.is_on_floor():
-		transitioned.emit(self, play_char.walk_or_run)
+		transitioned.emit(self, "IdleToRunState")
 	else:
 		play_char.set_horizontal_velocity_from_input(Vector3.ZERO, 0.0)

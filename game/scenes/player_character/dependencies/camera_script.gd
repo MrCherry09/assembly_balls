@@ -356,15 +356,10 @@ func change_fov() -> void:
 				fov_change_tween.tween_property(camera, "fov", default_fovs.x, default_fovs.y)
 				fov_change_tween.finished.connect(Callable(fov_change_tween, "kill"))
 			else:
-				var walk_or_run_state: String
-				if play_char.walk_or_run == "WalkState":
-					walk_or_run_state = "Walk"
-				if play_char.walk_or_run == "RunState":
-					if (play_char.velocity.x < 1.0 and play_char.velocity.x > -1.0 and play_char.velocity.z < 1.0 and play_char.velocity.z > -1.0):
-						walk_or_run_state = "Walk"
-					else:
-						walk_or_run_state = "Run"
-				var walk_or_run_fovs := get_state_fovs(walk_or_run_state)
+				var inair_fov_state: String = "Run"
+				if play_char.velocity.x < 1.0 and play_char.velocity.x > -1.0 and play_char.velocity.z < 1.0 and play_char.velocity.z > -1.0:
+					inair_fov_state = "Idle"
+				var walk_or_run_fovs := get_state_fovs(inair_fov_state)
 				fov_change_tween.tween_property(camera, "fov", walk_or_run_fovs.x, walk_or_run_fovs.y)
 				fov_change_tween.finished.connect(Callable(fov_change_tween, "kill"))
 

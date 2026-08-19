@@ -1,12 +1,15 @@
 extends State
 
-class_name RunState
+class_name IdleToRunState
 
-var state_name: String = "Run"
+var state_name: String = "IdleToRun"
 var play_char: CharacterBody3D
+var transition_timer: float = 0.0
+@export var transition_duration: float = 0.15
 
 func enter(play_char_ref: CharacterBody3D) -> void:
 	play_char = play_char_ref
+	transition_timer = transition_duration
 	verifications()
 
 func verifications() -> void:
@@ -20,11 +23,16 @@ func verifications() -> void:
 	play_char.tween_hitbox_height(play_char.base_hitbox_height)
 	play_char.tween_model_height(play_char.base_model_height)
 
-func physics_update(_delta: float) -> void:
+func physics_update(delta: float) -> void:
 	applies()
-	play_char.gravity_apply(_delta)
+	play_char.gravity_apply(delta)
 	input_management()
 	move()
+	
+	if play_char.move_direction and play_char.is_on_floor():
+		transition_timer -= delta
+		if transition_timer <= 0.0:
+			transitioned.emit(self, "RunState")
 
 func applies() -> void:
 	if !play_char.is_on_floor():

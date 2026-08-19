@@ -33,7 +33,7 @@ func applies(delta: float) -> void:
 			play_char.jump_buff_on = false
 			transitioned.emit(self, "JumpState")
 		elif play_char.move_direction:
-			transitioned.emit(self, play_char.walk_or_run)
+			transitioned.emit(self, "RunState")
 		else:
 			transitioned.emit(self, "IdleState")
 

@@ -34,7 +34,7 @@ func applies(delta: float) -> void:
 			transitioned.emit(self, "InairState")
 	if play_char.is_on_floor():
 		if play_char.move_direction:
-			transitioned.emit(self, play_char.walk_or_run)
+			transitioned.emit(self, "RunState")
 		else:
 			transitioned.emit(self, "IdleState")
 

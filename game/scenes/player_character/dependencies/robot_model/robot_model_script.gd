@@ -24,12 +24,19 @@ enum AnimLayer {
 
 @export_group("Animations")
 @export var anim_idle := "Idle"
-@export var anim_walk := "Walk"
+@export var anim_idle_speed := 1.0
+@export var anim_idle_to_run := "IdleToRun"
+@export var anim_idle_to_run_speed := 1.0
 @export var anim_run := "Run"
+@export var anim_run_speed := 1.0
 @export var anim_crouch := "Crouch"
+@export var anim_crouch_speed := 1.0
 @export var anim_jump := "Jump"
+@export var anim_jump_speed := 1.0
 @export var anim_jump1 := "Jump1"
+@export var anim_jump1_speed := 1.0
 @export var anim_inair := "Inair"
+@export var anim_inair_speed := 1.0
 @onready var limbs_and_head: MeshInstance3D = %"Limbs and head"
 @onready var cam_face_link: Node3D = %CamFaceLink
 @onready var skeleton_3d: Skeleton3D = $RobotArmature/Skeleton3D
@@ -77,19 +84,27 @@ func _update_animations() -> void:
 				if last_anim == anim_crouch:
 					anim = anim_jump1
 					blend = 0.3
+					speed = anim_jump1_speed
 				else:
 					anim = anim_jump
+					speed = anim_jump_speed
 
 	if curr_state is InairState:
 		anim = anim_inair
-	if curr_state is WalkState:
-		anim = anim_walk
+		speed = anim_inair_speed
+	if curr_state is IdleToRunState:
+		anim = anim_idle_to_run
+		speed = anim_idle_to_run_speed
+		blend = 0.0
 	if curr_state is RunState:
 		anim = anim_run
+		speed = anim_run_speed
 	if curr_state is CrouchState:
 		anim = anim_crouch
+		speed = anim_crouch_speed
 	if curr_state is IdleState:
 		anim = anim_idle
+		speed = anim_idle_speed
 
 	last_anim = anim
 	last_state = curr_state

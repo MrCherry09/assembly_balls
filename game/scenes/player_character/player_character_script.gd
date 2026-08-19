@@ -9,7 +9,6 @@ class_name PlayerCharacter
 @export_group("Speeds")
 ## Multiplies all movement speeds at runtime.
 @export var speed_modifier: float = 1.0
-@export var walk_speed: float = 4.0
 @export var run_speed: float = 7.0
 @export var crouch_speed: float = 2.0
 @export var jump_height: float = 2.2
@@ -21,7 +20,6 @@ var move_direction: Vector3
 var last_frame_position: Vector3
 var last_frame_velocity: Vector3
 var was_on_floor: bool
-var walk_or_run: String = "WalkState"
 @export var base_hitbox_height: float = 2.0
 @export var base_model_height: float = 2.0
 @export var height_change_duration: float = 0.15
@@ -75,13 +73,12 @@ var body_yaw: float = 0.0
 @export var move_backward_action: StringName = "play_char_move_backward_action"
 @export var move_left_action: StringName = "play_char_move_left_ation"
 @export var move_right_action: StringName = "play_char_move_right_action"
-@export var run_action: StringName = "play_char_run_action"
 @export var crouch_action: StringName = "play_char_crouch_action"
 @export var jump_action: StringName = "play_char_jump_action"
 
 @onready var input_actions_list: Array[StringName] = [
 	move_forward_action, move_backward_action, move_left_action, move_right_action,
-	run_action, crouch_action, jump_action,
+	crouch_action, jump_action,
 ]
 @export var check_on_ready_if_inputs_registered: bool = true
 var default_input_actions: Dictionary
@@ -118,7 +115,6 @@ func build_default_keybinding() -> void:
 		move_backward_action: [Key.KEY_S, Key.KEY_DOWN],
 		move_left_action: [Key.KEY_A, Key.KEY_LEFT],
 		move_right_action: [Key.KEY_D, Key.KEY_RIGHT],
-		run_action: [Key.KEY_SHIFT],
 		crouch_action: [Key.KEY_CTRL],
 		jump_action: [Key.KEY_SPACE],
 	}
@@ -230,15 +226,10 @@ func set_horizontal_velocity_from_input(direction: Vector3, speed: float) -> voi
 		velocity.z = 0.0
 
 func current_ground_move_speed() -> float:
-	if walk_or_run == "RunState":
-		return scaled(run_speed)
-	return scaled(walk_speed)
+	return scaled(run_speed)
 
 func scaled(base_speed: float) -> float:
 	return base_speed * speed_modifier
-
-func get_walk_speed() -> float:
-	return scaled(walk_speed)
 
 func get_run_speed() -> float:
 	return scaled(run_speed)

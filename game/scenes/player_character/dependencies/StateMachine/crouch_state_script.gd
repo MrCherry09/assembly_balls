@@ -42,12 +42,16 @@ func input_management() -> void:
 	if play_char.continious_crouch:
 		if play_char.action_just_pressed(play_char.crouch_action):
 			if !raycast_verification():
-				play_char.walk_or_run = "WalkState"
-				transitioned.emit(self, "WalkState")
+				if play_char.move_direction:
+					transitioned.emit(self, "RunState")
+				else:
+					transitioned.emit(self, "IdleState")
 	elif !play_char.action_pressed(play_char.crouch_action):
 		if !raycast_verification():
-			play_char.walk_or_run = "WalkState"
-			transitioned.emit(self, "WalkState")
+			if play_char.move_direction:
+				transitioned.emit(self, "RunState")
+			else:
+				transitioned.emit(self, "IdleState")
 
 func raycast_verification() -> bool:
 	return play_char.ceiling_check.is_colliding()
